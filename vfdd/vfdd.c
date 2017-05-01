@@ -10,7 +10,7 @@
 #include <sys/time.h>
 #include <signal.h>
 #include <unistd.h>
-#include <sys/fcntl.h>
+#include <fcntl.h>
 
 #include "vfdd.h"
 

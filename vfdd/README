@@ -1,0 +1,33 @@
+vfdd, the vfd companion daemon
+------------------------------
+
+vfdd is the demon that drives the LCD display managed by the vfd linux driver.
+It is very simple, small and fast, but at the same time it is pretty flexible
+and easily extendable. It is meant to eat as little resources as possible.
+It can run from plain Linux or from Android.
+
+The config file is well commented and self-explanatory.
+
+
+Building for Linux
+------------------
+
+Well, just run 'make'. You can define the CROSS_COMPILE variable to create
+binaries for other platforms, for example:
+
+	make CROSS_COMPILE=aarch64-linux-gnu- LDFLAGS=-static MODE=release
+
+
+Building for Android
+--------------------
+
+vfdd builds as a Native Android binary. All you have to do is to download NDK,
+then run $(NDK_ROOT)/ndk-build. You will end with an arm-v7 and an aarch64
+executable in the libs/ subdirectory.
+
+Also take care that BioniC (the glibc replacement in Android) has a lame
+getopt() implementation, so config file name must come last on the command
+line, e.g:
+
+	vfdd vfd-debug.ini -v                 -- WRONG
+	vfdd -v vfd-debug.ini                 -- RIGHT

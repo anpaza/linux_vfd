@@ -1,4 +1,7 @@
 out
-meson-vfd.14
+obj
+libs
 mk
+mka
+meson-vfd.14
 vfdd-debug.ini

@@ -14,14 +14,14 @@
 			    "up",
 			    "down",
 			    "enter";
-		/* scan code, linux key code */
+		/* [scan code] [linux key code] */
 		key_codes = /bits/ 16 <
-			    0x02, KEY_POWER,
-			    0x07, KEY_VOLUMEDOWN,
-			    0x01, KEY_VOLUMEUP,
-			    0x05, KEY_MENU,
-			    0x04, KEY_CHANNELUP,
-			    0x06, KEY_CHANNELDOWN,
-			    0x00, KEY_ENTER,
+			    0x02 KEY_POWER
+			    0x07 KEY_VOLUMEDOWN
+			    0x01 KEY_VOLUMEUP
+			    0x05 KEY_MENU
+			    0x04 KEY_CHANNELUP
+			    0x06 KEY_CHANNELDOWN
+			    0x00 KEY_ENTER
 		>;
 	};

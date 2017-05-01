@@ -158,15 +158,11 @@ static ssize_t vfd_brightness_store(struct device *dev, struct device_attribute 
 	char *endp;
 	unsigned bri;
 
-	DBG_PRINT("[%s] %ld\n", buf, count);
-
 	buf = skip_spaces (buf);
 
 	bri = simple_strtoul(buf, &endp, 0);
 	if (endp == buf)
 		return -EINVAL;
-
-	DBG_PRINT("buf %p endp %p bri %d\n", buf, endp, bri);
 
 	if (bri > vfd->brightness_max)
 		bri = vfd->brightness_max;

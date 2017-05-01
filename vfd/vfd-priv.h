@@ -10,7 +10,7 @@
 
 #define VFD_DEV_NAME		"aml_vfd"
 
-#define VFD_DEBUG
+//#define VFD_DEBUG
 #ifdef VFD_DEBUG
 #define DBG_PRINT(msg,...)	printk ("%s:%d (%s): " msg, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 #define DBG_TRACE		printk ("%s:%d (%s)\n", __FILE__, __LINE__, __FUNCTION__)
