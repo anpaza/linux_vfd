@@ -112,7 +112,7 @@ update_display:
 static void task_display_update_overlay (struct task_display_t *self)
 {
 	int i;
-	char *buff = malloc (self->overlay_len * 5);
+	char *buff = malloc (self->overlay_len * 5 + 1);
 
 	for (i = 0; i < self->overlay_len; i++)
 		sprintf (buff + i * 5, "%04x ", self->overlay [i]);
@@ -149,20 +149,6 @@ static void task_display_set_indicator (struct task_display_t *self, const char 
 	}
 }
 
-static void task_display_fini (struct task_t *self)
-{
-	struct task_display_t *self_display = (struct task_display_t *)self;
-
-	if (self_display->indicators)
-		free (self_display->indicators);
-	if (self_display->overlay)
-		free (self_display->overlay);
-
-	task_fini (&self_display->task);
-
-	free (self_display);
-}
-
 static void task_display_set_brightness (struct task_display_t *self, int value)
 {
 	struct task_display_t *self_display = (struct task_display_t *)self;
@@ -178,6 +164,41 @@ static void task_display_set_brightness (struct task_display_t *self, int value)
 	self_display->brightness = value;
 	raw_value = (value * self_display->brightness_max) / 100;
 	sysfs_set_int (self_display->device, "brightness", raw_value);
+}
+
+static void task_display_fini (struct task_t *self)
+{
+	struct task_display_t *self_display = (struct task_display_t *)self;
+	struct display_user_t **user;
+	int i;
+
+	/* clear display */
+	sysfs_set_str (self_display->device, "display", "");
+
+	/* clear all indicators */
+	for (i = 0; i < self_display->indicator_count; i++)
+		task_display_set_indicator (self_display,
+			self_display->indicators [i].name, 0);
+
+	if (self_display->indicators) {
+		for (i = 0; i < self_display->indicator_count; i++)
+			free (self_display->indicators [i].name);
+		free (self_display->indicators);
+	}
+
+	for (user = &self_display->users; *user; ) {
+		struct display_user_t *next = (*user)->next;
+		free ((*user)->display);
+		free (*user);
+		*user = next;
+	}
+
+	if (self_display->overlay)
+		free (self_display->overlay);
+
+	task_fini (&self_display->task);
+
+	free (self_display);
 }
 
 struct task_t *task_display_new (const char *instance)
@@ -226,7 +247,7 @@ struct task_t *task_display_new (const char *instance)
 	}
 
 	/* initialize overlay */
-	tmp = sysfs_get_str (self->device, "overlay", NULL);
+	tmp = sysfs_get_str (self->device, "overlay");
 	cur = tmp;
 
 	for (self->overlay_len = 0; ; ) {
@@ -246,8 +267,10 @@ struct task_t *task_display_new (const char *instance)
 		cur = endp;
 	}
 
+	free (tmp);
+
 	/* get max brightness */
-	self->brightness_max = sysfs_get_int (self->device, "brightness_max", 1);
+	self->brightness_max = sysfs_get_int (self->device, "brightness_max");
 	self->set_brightness (self, self->brightness);
 
 	return &self->task;

@@ -13,6 +13,23 @@
 
 static struct task_t *g_tasks = NULL;
 
+/* declare task constructors below */
+
+extern struct task_t *task_display_new (const char *instance);
+extern struct task_t *task_clock_new (const char *instance);
+extern struct task_t *task_cmd_new (const char *instance);
+extern struct task_t *task_temp_new (const char *instance);
+
+static struct task_module_t {
+	const char *name;
+	struct task_t *(*new) (const char *instance);
+} task_modules [] = {
+	{ "display", task_display_new },
+	{ "clock", task_clock_new },
+//	{ "cmd", task_cmd_new },
+	{ "temp", task_temp_new },
+};
+
 static void task_add (struct task_t *task)
 {
 	if (g_tasks == NULL)
@@ -49,9 +66,12 @@ void task_fini (struct task_t *self)
 
 struct task_t *task_find (const char *instance)
 {
-	for (struct task_t *cur = g_tasks; cur != NULL; cur = cur->next)
+	struct task_t *cur;
+
+	for (cur = g_tasks; cur != NULL; cur = cur->next)
 		if (strcmp (instance, cur->instance) == 0)
 			return cur;
+
 	return NULL;
 }
 
@@ -62,18 +82,25 @@ int tasks_init ()
 	struct task_t *cur;
 
 	for (tok = strtok_r (tsk, g_spaces, &save); tok != NULL; tok = strtok_r (NULL, g_spaces, &save)) {
-		if (task_cmp (tok, "display") == 0)
-			task_add (task_display_new (tok));
-		else if (task_cmp (tok, "clock") == 0)
-			task_add (task_clock_new (tok));
-		else
+		int i, ok = 0;
+
+		for (i = 0; i < ARRAY_SIZE (task_modules); i++)
+			if (task_cmp (tok, task_modules [i].name) == 0) {
+				task_add (task_modules [i].new (tok));
+				ok = 1;
+				break;
+			}
+
+		if (ok == 0)
 			fprintf (stderr, "Task '%s' unknown, ignoring\n", tok);
 	}
 
 	free (tsk);
 
-	if (g_tasks == NULL)
+	if (g_tasks == NULL) {
+		fprintf (stderr, "No valid tasks in config, aborting\n");
 		return -EINVAL;
+	}
 
 	for (cur = g_tasks; cur; cur = cur->next)
 		if (cur->post_init)
@@ -89,7 +116,7 @@ void tasks_run ()
 
 	gettimeofday (&tv, NULL);
 
-	for (;;) {
+	while (!g_shutdown) {
 		/* sleep no more than 10 seconds */
 		unsigned sleep_time = 10000;
 

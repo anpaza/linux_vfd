@@ -22,16 +22,17 @@ all: $(OUT)vfdd
 clean:
 	rm -rf $(OUT)
 
-$(OUT)%.o: %.c $(OUT)
+$(OUT)%.o: %.c $(OUT).stamp.dir
 	$(CC) $(CFLAGS.local) $(CFLAGS) -o $@ $<
 
-$(OUT)%.o: cfg_parse/%.c $(OUT)
+$(OUT)%.o: cfg_parse/%.c $(OUT).stamp.dir
 	$(CC) $(CFLAGS.local) $(CFLAGS) -o $@ $<
 
-$(OUT):
-	mkdir -p $(@:/=)
+$(OUT).stamp.dir:
+	mkdir -p $(@D)
+	touch $@
 
-VFDD_SRC = vfdd.c cfg_parse.c cfg.c sysfs.c task.c task-display.c task-clock.c
+VFDD_SRC = vfdd.c cfg_parse.c cfg.c sysfs.c task.c task-display.c task-clock.c task-temp.c
 
 $(OUT)vfdd: $(addprefix $(OUT),$(VFDD_SRC:.c=.o))
 	$(LD) $(LDFLAGS.local) $(LDFLAGS) -o $@ $^

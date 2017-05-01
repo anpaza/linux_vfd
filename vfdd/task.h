@@ -66,10 +66,4 @@ extern void task_init (struct task_t *self, const char *instance);
 extern struct task_t *task_find (const char *instance);
 extern void task_fini (struct task_t *self);
 
-/* declare task constructors below */
-
-extern struct task_t *task_display_new (const char *instance);
-extern struct task_t *task_clock_new (const char *instance);
-extern struct task_t *task_cmd_new (const char *instance);
-
 #endif /* __TASK_H__ */

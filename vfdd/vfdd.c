@@ -3,20 +3,28 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <getopt.h>
 #include <stdarg.h>
 #include <time.h>
 #include <sys/time.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/fcntl.h>
+
 #include "vfdd.h"
 
 const char *g_version = "0.1.0";
 const char *g_config = "/etc/vfdd.ini";
+const char *g_pidfile = "/var/run/vfdd.pid";
 int g_verbose = 0;
 int g_daemon = 0;
+int g_kill_daemon = 0;
+volatile int g_shutdown = 0;
 const char *g_spaces = " \t";
 
 // the global config
-struct cfg_struct *g_cfg;
+struct cfg_struct *g_cfg = NULL;
 
 static void show_version ()
 {
@@ -27,9 +35,12 @@ static void show_help (char *const *argv)
 {
 	show_version ();
 	printf ("usage: %s [options] [config-file]\n", argv [0]);
-	printf ("	-h  display this help\n");
-	printf ("	-v  verbose info about what's cooking\n");
-	printf ("	-V  display program version\n");
+	printf ("	-D	daemonize the program\n");
+	printf ("	-p FILE	write PID to file when running as daemon\n");
+	printf ("	-k	kill the running daemon\n");
+	printf ("	-h	display this help\n");
+	printf ("	-v	verbose info about what's cooking\n");
+	printf ("	-V	display program version\n");
 }
 
 void trace (const char *format, ...)
@@ -52,6 +63,11 @@ void trace (const char *format, ...)
 	va_end (argp);
 }
 
+static void signal_handler (int sig)
+{
+	g_shutdown = 1;
+}
+
 static int load_config ()
 {
 	int ret;
@@ -68,14 +84,81 @@ static int load_config ()
 	return 0;
 }
 
+static void daemonize ()
+{
+	pid_t pid;
+
+	g_verbose = 0;
+
+	pid = fork ();
+	if (pid < 0) {
+		fprintf (stderr, "can't demonize.\naborted.\n");
+		exit (-1);
+	}
+
+	if (pid != 0) {
+		int h = open (g_pidfile, O_CREAT | O_WRONLY, 0644);
+		if (h >= 0) {
+			char tmp [10];
+			write (h, tmp, snprintf (tmp, sizeof (tmp), "%d", pid));
+			close (h);
+		} else
+			fprintf (stderr, "failed to write pid file '%s'\n", g_pidfile);
+
+		/* successfuly daemonized */
+		exit (2);
+	}
+
+	/* continuing in child, close console */
+	close (0);
+	close (1);
+	close (2);
+}
+
+static int kill_daemon ()
+{
+	char tmp [11];
+	int h, n, ok = -1;
+	pid_t pid = -1;
+
+	h = open (g_pidfile, O_RDONLY);
+	if (h < 0) {
+		fprintf (stderr, "failed to read pid from file '%s'\n", g_pidfile);
+		return -1;
+	}
+
+	n = read (h, tmp, sizeof (tmp) - 1);
+	if (n > 0) {
+		tmp [n] = 0;
+		pid = strtoul (tmp, NULL, 0);
+		if (pid > 1)
+			ok = kill (pid, SIGINT);
+	}
+
+	close (h);
+
+	if (ok != 0)
+		fprintf (stderr, "failed to kill daemon pid %d\n", pid);
+
+	return ok;
+}
+
 int main (int argc, char *const *argv)
 {
 	int ret;
 
-	while ((ret = getopt (argc, argv, "DhvV")) >= 0)
+	while ((ret = getopt (argc, argv, "Dp:khvV")) >= 0)
 		switch (ret) {
 			case 'D':
 				g_daemon = 1;
+				break;
+
+			case 'p':
+				g_pidfile = optarg;
+				break;
+
+			case 'k':
+				g_kill_daemon = 1;
 				break;
 
 			case 'v':
@@ -94,14 +177,36 @@ int main (int argc, char *const *argv)
 	if (optind < argc)
 		g_config = argv [optind++];
 
+	if (g_kill_daemon)
+		return kill_daemon ();
+
+	if (g_daemon)
+		daemonize ();
+
 	// load the config file
 	if ((ret = load_config ()) < 0)
-		return ret;
+		goto leave;
 
 	if ((ret = tasks_init ()) < 0)
-		return ret;
+		goto leave;
+
+	signal (SIGINT,  signal_handler);
+	signal (SIGQUIT, signal_handler);
+	signal (SIGKILL, signal_handler);
+	signal (SIGTERM, signal_handler);
 
 	tasks_run ();
 
-	return 0;
+	tasks_fini ();
+
+	ret = 0;
+
+leave:
+	if (g_cfg)
+		cfg_free (g_cfg);
+
+	if (g_daemon)
+		unlink (g_pidfile);
+
+	return ret;
 }

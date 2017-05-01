@@ -8,14 +8,13 @@
 
 #include "vfdd.h"
 
-char *sysfs_get_str (const char *device, const char *attr, const char *defval)
+char *sysfs_read (const char *device_attr)
 {
-	int h;
+	int h, n;
 	off_t fsize;
 	char tmp [1000];
-	snprintf (tmp, sizeof (tmp), "%s/%s", device, attr);
 
-	h = open (tmp, O_RDONLY);
+	h = open (device_attr, O_RDONLY);
 	if (h < 0)
 		goto error;
 
@@ -26,39 +25,48 @@ char *sysfs_get_str (const char *device, const char *attr, const char *defval)
 	if (fsize >= sizeof (tmp))
 		fsize = sizeof (tmp) - 1;
 	lseek (h, 0, SEEK_SET);
-	if (read (h, tmp, fsize) != fsize)
+	n = read (h, tmp, fsize);
+	if (n <= 0)
 		goto error;
-	tmp [fsize] = 0;
+	tmp [n] = 0;
 
 	close (h);
 	return strdup (tmp);
 
 error:
-	trace ("failed to read sysfs attr %s from dev %s\n", attr, device);
+	trace ("failed to read sysfs attr from %s\n", device_attr);
 
 	if (h >= 0)
 		close (h);
-	return strdup (defval);
+	return NULL;
 }
 
-int sysfs_get_int (const char *device, const char *attr, int defval)
+char *sysfs_get_str (const char *device, const char *attr)
 {
-	char *val = sysfs_get_str (device, attr, NULL);
-	if (val) {
-		defval = strtol (val, NULL, 0);
-		free (val);
-	}
-
-	return defval;
-}
-
-int sysfs_set_str (const char *device, const char *attr, const char *value)
-{
-	int h, n;
-	char tmp [1000];
+	char tmp [200];
 	snprintf (tmp, sizeof (tmp), "%s/%s", device, attr);
 
-	h = open (tmp, O_WRONLY);
+	return sysfs_read (tmp);
+}
+
+int sysfs_get_int (const char *device, const char *attr)
+{
+	int val;
+	char *vals = sysfs_get_str (device, attr);
+	if (!vals)
+		return -1;
+
+	val = strtol (vals, NULL, 0);
+	free (vals);
+
+	return val;
+}
+
+int sysfs_write (const char *device_attr, const char *value)
+{
+	int h, n;
+
+	h = open (device_attr, O_TRUNC | O_WRONLY);
 	if (h < 0)
 		goto error;
 
@@ -70,12 +78,18 @@ int sysfs_set_str (const char *device, const char *attr, const char *value)
 	return 0;
 
 error:
-	trace ("failed to write [%s] into sysfs attr %s from dev %s\n",
-		value, attr, device);
+	trace ("failed to write attr [%s] into %s\n", value, device_attr);
 
 	if (h >= 0)
 		close (h);
 	return -1;
+}
+
+int sysfs_set_str (const char *device, const char *attr, const char *value)
+{
+	char tmp [200];
+	snprintf (tmp, sizeof (tmp), "%s/%s", device, attr);
+	return sysfs_write (tmp, value);
 }
 
 int sysfs_set_int (const char *device, const char *attr, int value)

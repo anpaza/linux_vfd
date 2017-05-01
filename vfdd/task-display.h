@@ -15,7 +15,7 @@ struct display_user_t {
 };
 
 struct indicator_t {
-	const char *name;
+	char *name;
 	int bit [2];
 };
 

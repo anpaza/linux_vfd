@@ -38,9 +38,12 @@ struct vfd_glyph_t vfd_glyphs [] = {
 	{ '~', a },
 	{ '-', g },
 	{ '_', d },
+	{ '`', f },
+	{ '\'', b },
+	{ '"', b|f },
 	{ '/', e|g|b },
 	{ '\\', f|g|c },
-	{ '"', a|b|g|f },	// degree sign
+	{ '*', a|b|f|g },	// degree sign
 	{ 'A', e|f|a|b|c|g },
 	{ 'B', a|b|c|d|e|f|g },
 	{ 'C', a|f|e|d },
