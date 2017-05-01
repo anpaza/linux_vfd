@@ -1,0 +1,90 @@
+X92 LCD connection.
+Uses the FD628 IC (compatible with PT6964 SM1628, TM1623)
+
+AMLogic S912 GPIOs connected to IC:
+
+	221 - STB		GPIODV_17
+	220 - CLK		GPIODV_16
+	219 - DO/DI		GPIODV_15
+
+
+LED display pins:
+
+ 1  2  3  4  5  6  7  8  9 10 11 12
+------------------------------------
+             -   -     -   -
+APPS  USB   | | | | . | | | |  HDMI
+             -   -     -   -
+SETUP CARD  | | | | . | | | |  CVBS
+             -   -     -   -
+------------------------------------
+            D-0 D-1   D-2 D-3
+
+ 1 - GRID1
+ 2 - GRID2
+ 3 - GRID3
+ 4 - GRID4
+ 5 - GRID5
+ 6 - GRID6
+ 7 - GRID7
+ 8 - SEG8/KS8
+ 9 - SEG7/KS7
+10 - SEG6/KS6
+11 - SEG5/KS5
+12 - SEG4/KS4
+
+The display is reverse polarity, that is, common ANODE.
+Because of this, LED display GRIDs are connected to IC SEG's, and
+display SEGs are connected to IC GRID. As a result, one byte of
+internal IC display RAM lights up one bit in 5 different sections
+of the display (four digits and one of the extra indicators -
+APPS, USB, SETUP, CARD, HDMI, CVBS or the colon between digits).
+
+     a
+    ---
+ f |   | b
+    -g-
+ e |   | c
+    ---
+     d
+
+video buffer layout
+------------------------------
+address | bit | description
+--------+-----+---------------
+    0   |  3  | APPS
+        |  4  | D-3-a
+        |  5  | D-2-a
+        |  6  | D-1-a
+        |  7  | D-0-a
+    1   |  3  | SETUP
+        |  4  | D-3-b
+        |  5  | D-2-b
+        |  6  | D-1-b
+        |  7  | D-0-b
+    2   |  3  | USB
+        |  4  | D-3-c
+        |  5  | D-2-c
+        |  6  | D-1-c
+        |  7  | D-0-c
+    3   |  3  | CARD
+        |  4  | D-3-d
+        |  5  | D-2-d
+        |  6  | D-1-d
+        |  7  | D-0-d
+    4   |  3  | :
+        |  4  | D-3-e
+        |  5  | D-2-e
+        |  6  | D-1-e
+        |  7  | D-0-e
+    5   |  3  | HDMI
+        |  4  | D-3-f
+        |  5  | D-2-f
+        |  6  | D-1-f
+        |  7  | D-0-f
+    6   |  3  | CVBS
+        |  4  | D-3-g
+        |  5  | D-2-g
+        |  6  | D-1-g
+        |  7  | D-0-g
+--------+-----+---------------

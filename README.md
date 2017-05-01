@@ -13,3 +13,6 @@ for button input.
 
 Currently, the driver supports the following ICs:
 PT6964, SM1628, TM1623, FD268
+
+Additionaly, a highly configurable daemon program is provided that will
+fill the LED display with various useful information.

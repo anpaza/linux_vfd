@@ -252,14 +252,15 @@ static void vfd_scan_keys(struct vfd_t *vfd)
 }
 #endif
 
-//***//***//***//***//***//***// periodic check //***//***//***//***//***//***//
+//***//***//***//***//***//***// timer interrupt //***//***//***//***//***//***//
 
 void vfd_timer_sr(unsigned long data)
 {
 	struct vfd_t *vfd = (struct vfd_t *)data;
 
 #ifndef CONFIG_VFD_NO_KEY_INPUT
-	vfd_scan_keys(vfd);
+	if (vfd->input)
+		vfd_scan_keys(vfd);
 #endif
 	if (vfd->need_update) {
 		vfd->need_update = 0;
@@ -270,44 +271,6 @@ void vfd_timer_sr(unsigned long data)
 
 	mod_timer(&vfd->timer, jiffies + msecs_to_jiffies(200));
 }
-
-//***//***//***//***//***//***// /dev/aml_vfd //***//***//***//***//***//***//
-
-#if 0
-
-static int vfd_config_open(struct inode *inode, struct file *file)
-{
-	return 0;
-}
-
-static int vfd_config_release(struct inode *inode, struct file *file)
-{
-	return 0;
-}
-
-static const struct file_operations vfd_fops = {
-	.owner   = THIS_MODULE,
-	.open    = vfd_config_open,
-	.release = vfd_config_release,
-};
-
-static __init int register_vfd_dev(struct vfd_t *vfd)
-{
-	int ret = 0;
-	ret = register_chrdev(0, VFD_DEV_NAME, &vfd_fops);
-	if (ret <= 0) {
-		printk("register char dev vfd error\r\n");
-		return  ret;
-	}
-
-	vfd->config_major = ret;
-	vfd->config_class = class_create(THIS_MODULE, VFD_DEV_NAME);
-	vfd->config_dev = device_create (vfd->config_class, NULL,
-		MKDEV(vfd->config_major, 0), NULL, VFD_DEV_NAME);
-	return ret;
-}
-
-#endif
 
 //***//***//***//***// Platform device implementation //***//***//***//***//
 
@@ -433,10 +396,6 @@ static int __init vfd_probe(struct platform_device *pdev)
 	if ((ret = __setup_input (pdev, vfd)) < 0)
 		goto err2;
 
-#if 0
-	register_vfd_dev(vfd);
-#endif
-
 	return 0;
 
 err2:
@@ -461,15 +420,6 @@ static int vfd_remove(struct platform_device *pdev)
 
 	if (vfd->input != NULL)
 		input_free_device(vfd->input);
-
-#if 0
-	unregister_chrdev(vfd->config_major, VFD_DEV_NAME);
-	if (vfd->config_class) {
-		if (vfd->config_dev)
-			device_destroy(vfd->config_class, MKDEV(vfd->config_major, 0));
-		class_destroy(vfd->config_class);
-	}
-#endif
 
 	kfree(vfd);
 
