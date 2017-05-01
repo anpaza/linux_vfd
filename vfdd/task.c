@@ -19,6 +19,7 @@ extern struct task_t *task_display_new (const char *instance);
 extern struct task_t *task_clock_new (const char *instance);
 extern struct task_t *task_cmd_new (const char *instance);
 extern struct task_t *task_temp_new (const char *instance);
+extern struct task_t *task_disk_new (const char *instance);
 
 static struct task_module_t {
 	const char *name;
@@ -28,10 +29,14 @@ static struct task_module_t {
 	{ "clock", task_clock_new },
 //	{ "cmd", task_cmd_new },
 	{ "temp", task_temp_new },
+	{ "disk", task_disk_new },
 };
 
 static void task_add (struct task_t *task)
 {
+	if (!task)
+		return;
+
 	if (g_tasks == NULL)
 		g_tasks = task;
 	else {

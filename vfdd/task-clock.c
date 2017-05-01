@@ -99,7 +99,7 @@ struct task_t *task_clock_new (const char *instance)
 	self->separator = cfg_get_str (instance, "separator", DEFAULT_CLOCK_SEPARATOR);
 	self->display_task = cfg_get_str (instance, "display", DEFAULT_DISPLAY);
 	self->separator_always = cfg_get_int (instance, "separator.always", 0);
-	self->priority = cfg_get_int (instance, "priority", 0);
+	self->priority = cfg_get_int (instance, "priority", DEFAULT_PRIORITY);
 
 	if (!*self->separator)
 		self->separator = NULL;

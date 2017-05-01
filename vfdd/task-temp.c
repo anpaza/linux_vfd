@@ -45,6 +45,7 @@ static unsigned task_temp_run (struct task_t *self, struct timeval *tv)
 		return 10000;
 
 	temp = strtol (tmp, NULL, 0) / self_temp->divider;
+	free (tmp);
 
 	if (self_temp->display) {
 		char buff [20];
@@ -66,11 +67,11 @@ struct task_t *task_temp_new (const char *instance)
 	self->task.post_init = task_temp_post_init;
 	self->task.fini = task_temp_fini;
 
+	self->display_task = cfg_get_str (instance, "display", DEFAULT_DISPLAY);
 	self->value = cfg_get_str (instance, "value", DEFAULT_TEMP_VALUE);
 	self->format = cfg_get_str (instance, "format", DEFAULT_TEMP_FORMAT);
-	self->display_task = cfg_get_str (instance, "display", DEFAULT_DISPLAY);
 	self->divider = cfg_get_int (instance, "divider", DEFAULT_TEMP_DIVIDER);
-	self->priority = cfg_get_int (instance, "priority", 0);
+	self->priority = cfg_get_int (instance, "priority", DEFAULT_PRIORITY);
 
 	trace ("	format '%s' priority %d display '%s' value '%s'\n",
 		self->format, self->priority, self->display_task, self->value);

@@ -7,6 +7,9 @@
 
 #include "cfg_parse.h"
 
+// default settings for various task modules
+
+#define DEFAULT_PRIORITY	100
 #define DEFAULT_DEVICE		"/sys/bus/platform/devices/meson-vfd.14"
 #define DEFAULT_BRIGHTNESS	50
 #define DEFAULT_TASKS		"clock"
@@ -17,6 +20,10 @@
 #define DEFAULT_TEMP_VALUE	"/sys/devices/virtual/thermal/thermal_zone0/temp"
 #define DEFAULT_TEMP_FORMAT	"t%02d*"
 #define DEFAULT_TEMP_DIVIDER	1000
+#define DEFAULT_DISK_DEVICE	"sda"
+#define DEFAULT_DISK_FIELD	4
+#define DEFAULT_DISK_THRESHOLD	50
+#define DEFAULT_DISK_INDICATOR	"USB"
 
 #define ARRAY_SIZE(x)		(sizeof (x) / sizeof (x [0]))
 

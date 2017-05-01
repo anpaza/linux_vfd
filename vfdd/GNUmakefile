@@ -32,7 +32,8 @@ $(OUT).stamp.dir:
 	mkdir -p $(@D)
 	touch $@
 
-VFDD_SRC = vfdd.c cfg_parse.c cfg.c sysfs.c task.c task-display.c task-clock.c task-temp.c
+VFDD_SRC = vfdd.c cfg_parse.c cfg.c sysfs.c task.c \
+	task-display.c task-clock.c task-temp.c task-disk.c
 
 $(OUT)vfdd: $(addprefix $(OUT),$(VFDD_SRC:.c=.o))
 	$(LD) $(LDFLAGS.local) $(LDFLAGS) -o $@ $^
