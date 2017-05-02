@@ -28,6 +28,15 @@ config VFD_NO_KEY_INPUT
 	  connected to the driver IC. The driver will not
 	  create any input device in this case.
 
+config VFD_NO_DELAYS
+	tristate "Do not insert delays as per datasheet"
+	default n
+	depends on VFD_ENABLE
+	help
+	  If your CPU isn't blazing fast, calling gpio_xxx functions
+	  can be slow enough to make the IC happy without extra delays.
+	  This option will remove the delays, which is ok in many cases.
+
 choice
 	prompt "Display driver IC backend"
 	default VFD_PT6964

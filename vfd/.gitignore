@@ -1,2 +1,4 @@
 .*.o.cmd
 *.o
+modules.builtin
+modules.order

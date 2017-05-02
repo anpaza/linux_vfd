@@ -4,7 +4,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/delay.h>
 #include <linux/gpio/consumer.h>
 
 #include "vfd-priv.h"

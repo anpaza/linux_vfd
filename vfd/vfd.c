@@ -29,7 +29,6 @@
 #include <linux/irq.h>
 #include <linux/types.h>
 #include <linux/input.h>
-#include <linux/delay.h>
 #include <linux/platform_device.h>
 #include <linux/errno.h>
 #include <linux/of.h>

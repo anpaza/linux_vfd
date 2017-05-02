@@ -7,8 +7,14 @@
 
 #include <linux/timer.h>
 #include <linux/mutex.h>
+#include <linux/delay.h>
 
-#define VFD_DEV_NAME		"aml_vfd"
+#ifdef CONFIG_VFD_NO_DELAYS
+#undef udelay
+#undef ndelay
+#define udelay(x)
+#define ndelay(x)
+#endif
 
 //#define VFD_DEBUG
 #ifdef VFD_DEBUG
