@@ -15,8 +15,10 @@ struct display_user_t {
 };
 
 struct indicator_t {
+	/* indicator name */
 	char *name;
-	int bit [2];
+	/* current state */
+	int on;
 };
 
 struct task_display_t {

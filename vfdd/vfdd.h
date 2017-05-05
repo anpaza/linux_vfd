@@ -58,4 +58,6 @@ extern int sysfs_write (const char *device_attr, const char *value);
 extern int sysfs_set_str (const char *device, const char *attr, const char *value);
 extern int sysfs_set_int (const char *device, const char *attr, int value);
 
+extern int sysfs_exists (const char *device_attr);
+
 #endif /* __VFDD_H__ */

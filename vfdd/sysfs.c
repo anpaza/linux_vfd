@@ -98,3 +98,8 @@ int sysfs_set_int (const char *device, const char *attr, int value)
 	snprintf (tmp, sizeof (tmp), "%d", value);
 	return sysfs_set_str (device, attr, tmp);
 }
+
+int sysfs_exists (const char *device_attr)
+{
+	return access (device_attr, F_OK);
+}

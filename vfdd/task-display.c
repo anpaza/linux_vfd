@@ -109,19 +109,6 @@ update_display:
 	}
 }
 
-static void task_display_update_overlay (struct task_display_t *self)
-{
-	int i;
-	char *buff = malloc (self->overlay_len * 5 + 1);
-
-	for (i = 0; i < self->overlay_len; i++)
-		sprintf (buff + i * 5, "%04x ", self->overlay [i]);
-	buff [self->overlay_len * 5 - 1] = 0;
-
-	sysfs_set_str (self->device, "overlay", buff);
-	free (buff);
-}
-
 static void task_display_set_indicator (struct task_display_t *self, const char *indicator, int enable)
 {
 	int i;
@@ -133,25 +120,18 @@ static void task_display_set_indicator (struct task_display_t *self, const char 
 	for (i = 0; i < self->indicator_count; i++) {
 		struct indicator_t *ind = &self->indicators [i];
 		if (strcmp (indicator, ind->name) == 0) {
-			uint16_t mask = (1 << ind->bit [1]);
-			int ena = (self->overlay [ind->bit [0]] & mask) != 0;
-			if (ena == enable)
-				break;
-
-			if (enable)
-				self->overlay [ind->bit [0]] |= mask;
-			else
-				self->overlay [ind->bit [0]] &= ~mask;
-
-			task_display_update_overlay (self);
-			break;
+			char tmp [32];
+			snprintf (tmp, sizeof (tmp), "%s %d", indicator, enable);
+			sysfs_set_str (self->device, "dotled", tmp);
+			return;
 		}
 	}
+
+	trace ("%s: no indicator named '%s'\n", self->task.instance, indicator);
 }
 
 static void task_display_set_brightness (struct task_display_t *self, int value)
 {
-	struct task_display_t *self_display = (struct task_display_t *)self;
 	int raw_value;
 
 	if (value < 0)
@@ -159,11 +139,11 @@ static void task_display_set_brightness (struct task_display_t *self, int value)
 	else if (value > 100)
 		value = 100;
 
-	trace ("%s: set_brightness %d\n", self_display->task.instance, value);
+	trace ("%s: set_brightness %d\n", self->task.instance, value);
 
-	self_display->brightness = value;
-	raw_value = (value * self_display->brightness_max) / 100;
-	sysfs_set_int (self_display->device, "brightness", raw_value);
+	self->brightness = value;
+	raw_value = (value * self->brightness_max) / 100;
+	sysfs_set_int (self->device, "brightness", raw_value);
 }
 
 static void task_display_fini (struct task_t *self)
@@ -215,39 +195,55 @@ struct task_t *task_display_new (const char *instance)
 	self->set_brightness = task_display_set_brightness;
 
 	self->device = cfg_get_str (instance, "device", DEFAULT_DEVICE);
+	if (sysfs_exists (self->device) != 0) {
+		fprintf (stderr, "sysfs entry '%s' not found, aborting task '%s'\n",
+			self->device, self->task.instance);
+		task_display_fini (&self->task);
+		return NULL;
+	}
+
 	self->brightness = cfg_get_int (instance, "brightness", DEFAULT_BRIGHTNESS);
 	self->quantum = cfg_get_int (instance, "quantum", DEFAULT_DISPLAY_QUANTUM);
 	trace ("	device [%s] brightness %d quantum %d\n",
 		self->device, self->brightness, self->quantum);
 
-	tmp = (char *)cfg_get_str (instance, "indicators", NULL);
+	/* detect available dot LED indicators */
+	tmp = (char *)sysfs_get_str (self->device, "dotled");
 	if (tmp != NULL) {
-		char *tok, *save;
-		char indbit [20];
+		char *cur = tmp;
+		char name [20 + 1];
+		int ena, word, bit;
 
-		tmp = strdup (tmp);
-		for (tok = strtok_r (tmp, g_spaces, &save); tok != NULL; tok = strtok_r (NULL, g_spaces, &save)) {
-			int n = self->indicator_count;
+		for (;;) {
+			int n = sscanf (cur, " %20s %d %d %d", name, &ena, &word, &bit);
+			if (n != 4)
+				break;
+
+			n = self->indicator_count;
 			self->indicators = realloc (self->indicators,
 				(n + 1) * sizeof (struct indicator_t));
 
-			snprintf (indbit, sizeof (indbit), "bit.%s", tok);
-			if (cfg_get_int_2 (instance, indbit, self->indicators [n].bit) < 0) {
-				fprintf (stderr, "%s not defined, ignoring indicator %s\n",
-					indbit, tok);
-				continue;
-			}
-
-			self->indicators [n].name = strdup (tok);
+			self->indicators [n].name = strdup (name);
+			self->indicators [n].on = ena;
 			self->indicator_count++;
-			trace ("	indicator [%s] cell %d bit %d\n", tok,
-				self->indicators [n].bit [0], self->indicators [n].bit [1]);
+			trace ("	indicator [%s] enabled %d, word %d, bit %d\n",
+				self->indicators [n].name, self->indicators [n].on, word, bit);
+
+			cur = strchr (cur, '\n');
+			if (!cur)
+				break;
+			cur++;
 		}
-		free (tmp);
 	}
 
 	/* initialize overlay */
 	tmp = sysfs_get_str (self->device, "overlay");
+	if (!tmp) {
+		fprintf (stderr, "device '%s' is incompatible, aborting task '%s'\n",
+			self->device, self->task.instance);
+		task_display_fini (&self->task);
+		return NULL;
+	}
 	cur = tmp;
 
 	for (self->overlay_len = 0; ; ) {

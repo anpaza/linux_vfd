@@ -3,5 +3,5 @@ obj
 libs
 mk
 mka
-meson-vfd.14
+meson-vfd.*
 vfdd-debug.ini

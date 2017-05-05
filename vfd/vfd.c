@@ -31,6 +31,7 @@
 #include <linux/input.h>
 #include <linux/platform_device.h>
 #include <linux/errno.h>
+#include <linux/ctype.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_gpio.h>
@@ -42,6 +43,15 @@
 #include <asm/uaccess.h>
 
 #include "vfd-priv.h"
+
+static const char *skip_nspaces (const char *str, int *count)
+{
+	while (*count && isspace (*str)) {
+		(*count)--;
+		str++;
+	}
+	return str;
+}
 
 //***//***//***//***//***//***// sysfs support //***//***//***//***//***//***//
 
@@ -60,18 +70,24 @@ static ssize_t vfd_display_show(struct device *dev,
 	return vfd->display_len;
 }
 
-static ssize_t vfd_display_store(struct device *dev, struct device_attribute *attr,
-	const char *buf, size_t count)
+static void _vfd_display_store(struct vfd_t *vfd, const char *buf, size_t count)
 {
-	struct vfd_t *vfd = dev_get_drvdata(dev);
 	size_t n = (count > vfd->display_len) ? vfd->display_len : count;
 
 	mutex_lock(&vfd->lock);
 	/* pad with spaces */
-	memset(vfd->display, ' ', sizeof (vfd->display));
+	memset(vfd->display + n, 0, vfd->display_len - n);
 	memcpy(vfd->display, buf, n);
 	vfd->need_update = 1;
 	mutex_unlock(&vfd->lock);
+}
+
+static ssize_t vfd_display_store(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct vfd_t *vfd = dev_get_drvdata(dev);
+
+	_vfd_display_store (vfd, buf, count);
 
 	return count;
 }
@@ -94,19 +110,23 @@ static ssize_t vfd_overlay_store(struct device *dev, struct device_attribute *at
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 
-	int i;
+	int i, n, left = count;
 	char *endp;
-	const char *cur = skip_spaces (buf);
+	const char *cur = skip_nspaces (buf, &left);
 	u16 raw_overlay [ARRAY_SIZE (vfd->raw_overlay)];
 
 	for (i = 0; i < ARRAY_SIZE (vfd->raw_overlay); i++) {
-		u16 n = simple_strtoul (cur, &endp, 16);
+		if (left <= 0)
+			break;
+
+		n = simple_strtoul (cur, &endp, 16);
 		if (endp == cur)
 			break;
 
 		raw_overlay [i] = n;
 
-		cur = skip_spaces (endp);
+		left -= (endp - cur);
+		cur = skip_nspaces (endp, &left);
 	}
 
 	mutex_lock(&vfd->lock);
@@ -180,16 +200,88 @@ static ssize_t vfd_brightness_max_show(struct device *dev,
 	return sprintf(buf, "%d\n", vfd->brightness_max);
 }
 
+static ssize_t vfd_dotled_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct vfd_t *vfd = dev_get_drvdata(dev);
+	char *dst = buf;
+	int i;
+
+	for (i = 0; i < vfd->num_dotleds; i++) {
+		struct vfd_dotled_t *dotled = &vfd->dotleds [i];
+		int state = (vfd->raw_overlay [dotled->word] &
+			(1 << dotled->bit)) ? 1 : 0;
+		dst += sprintf(dst, "%s %d %d %d\n",
+			dotled->name, state, dotled->word, dotled->bit);
+	}
+
+	return dst - buf;
+}
+
+static ssize_t vfd_dotled_store(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct vfd_t *vfd = dev_get_drvdata(dev);
+	const char *cur = buf;
+	int i, left = count;
+
+	while (left) {
+		cur = skip_nspaces (cur, &left);
+
+		for (i = 0; i < vfd->num_dotleds; i++) {
+			struct vfd_dotled_t *dotled = &vfd->dotleds [i];
+			int n = strlen (dotled->name);
+			if (n + 1 > left)
+				continue;
+
+			if ((strncmp (cur, dotled->name, n) == 0) &&
+			    isspace (cur [n])) {
+				unsigned ena;
+				char *endp;
+
+				left -= n;
+				cur = skip_nspaces (cur + n, &left);
+				ena = simple_strtoul(cur, &endp, 0);
+				if (endp == cur)
+					goto error;
+
+				left -= (endp - cur);
+				cur = endp;
+
+				mutex_lock(&vfd->lock);
+				if (ena)
+					vfd->raw_overlay [dotled->word] |= (1 << dotled->bit);
+				else
+					vfd->raw_overlay [dotled->word] &= ~(1 << dotled->bit);
+				mutex_unlock(&vfd->lock);
+				break;
+			}
+		}
+
+		if (left && (i >= vfd->num_dotleds))
+			goto error;
+	}
+
+	return count;
+
+error:
+	/* unknown garbage found, barf but swallow */
+	dev_err(dev, "garbage encountered at pos %d: [NAME] [STATE] expected\n",
+		(int)(cur - buf));
+	return count;
+}
+
 static DEVICE_ATTR(key, S_IRUGO, vfd_key_show, NULL);
 static DEVICE_ATTR(display, S_IRUGO | S_IWUSR, vfd_display_show, vfd_display_store);
 static DEVICE_ATTR(overlay, S_IRUGO | S_IWUSR, vfd_overlay_show, vfd_overlay_store);
 static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, vfd_enable_show, vfd_enable_store);
 static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR, vfd_brightness_show, vfd_brightness_store);
 static DEVICE_ATTR(brightness_max, S_IRUGO, vfd_brightness_max_show, NULL);
+static DEVICE_ATTR(dotled, S_IRUGO | S_IWUSR, vfd_dotled_show, vfd_dotled_store);
 
 static const struct device_attribute *all_attrs [] = {
-	&dev_attr_key, &dev_attr_display, &dev_attr_overlay,
-	&dev_attr_enable, &dev_attr_brightness, &dev_attr_brightness_max,
+	&dev_attr_key, &dev_attr_display, &dev_attr_overlay, &dev_attr_enable,
+	&dev_attr_brightness, &dev_attr_brightness_max, &dev_attr_dotled,
 };
 
 //***//***//***//***//***//***// input support //***//***//***//***//***//***//
@@ -249,6 +341,15 @@ static void vfd_scan_keys(struct vfd_t *vfd)
 
 //***//***//***//***//***//***// timer interrupt //***//***//***//***//***//***//
 
+static char boot_anim [][4] = {
+	"boot",
+	"b__t",
+	"boot",
+	"b00t",
+	"b**t",
+	"b~~t",
+};
+
 void vfd_timer_sr(unsigned long data)
 {
 	struct vfd_t *vfd = (struct vfd_t *)data;
@@ -257,7 +358,13 @@ void vfd_timer_sr(unsigned long data)
 	if (vfd->input)
 		vfd_scan_keys(vfd);
 #endif
-	if (vfd->need_update) {
+
+	if (unlikely (vfd->boot_anim)) {
+		vfd->boot_anim--;
+		_vfd_display_store(vfd, boot_anim [vfd->boot_anim], 4);
+	}
+
+	if (unlikely (vfd->need_update)) {
 		vfd->need_update = 0;
 		mutex_lock(&vfd->lock);
 		hardware_display_update (vfd);
@@ -300,31 +407,63 @@ static __init int __setup_gpios (struct platform_device *pdev, struct vfd_t *vfd
 	return 0;
 }
 
+/* Set up dot LEDs */
+static __init int __setup_dotled (struct platform_device *pdev, struct vfd_t *vfd)
+{
+	int i;
+	struct property *prop;
+	u8 *ptr;
+
+	vfd->num_dotleds = of_property_count_strings(pdev->dev.of_node, "dot_names");
+	if (vfd->num_dotleds <= 0)
+		return 0;
+
+	prop = of_find_property(pdev->dev.of_node, "dot_bits", NULL);
+	if (!prop || !prop->value) {
+		dev_err(&pdev->dev, "dot_names defined, but dot_bits is empty!\n");
+		return 0;
+	}
+	if (prop->length != (vfd->num_dotleds * 2 * sizeof (u8))) {
+		dev_err(&pdev->dev, "Number of entries mismatch in dot_names (%d) and dot_bits (%d)!\n",
+			vfd->num_dotleds, (int)(prop->length / (2 * sizeof (u8))));
+		return 0;
+	}
+
+	vfd->dotleds = kmalloc (vfd->num_dotleds * sizeof (struct vfd_dotled_t), GFP_KERNEL);
+	ptr = (u8 *)prop->value;
+	for (i = 0; i < vfd->num_dotleds; i++) {
+		if (of_property_read_string_index(pdev->dev.of_node, "dot_names",
+			i, &vfd->dotleds [i].name) != 0)
+			/* this should never happen */
+			vfd->dotleds [i].name = "*BUG*";
+		vfd->dotleds [i].word = *ptr++;
+		vfd->dotleds [i].bit  = *ptr++;
+		DBG_PRINT ("dot led '%s', word %d, bit %d\n",
+			vfd->dotleds [i].name, vfd->dotleds [i].word, vfd->dotleds [i].bit);
+	}
+
+	return 0;
+}
+
 /* Set up input device */
 static __init int __setup_input (struct platform_device *pdev, struct vfd_t *vfd)
 {
 	int i, ret;
-	u16 *tmp_keys;
 	struct input_dev *input;
+	struct property *prop;
 
 	/* parse key description from DTS */
-	vfd->num_keys = of_property_count_strings (pdev->dev.of_node, "key_names");
-	if (vfd->num_keys > 0) {
-		tmp_keys = kmalloc (vfd->num_keys * 2 * sizeof (u16), GFP_KERNEL);
-
-		if (of_property_read_u16_array(pdev->dev.of_node, "key_codes", tmp_keys, vfd->num_keys) != 0) {
-			dev_err(&pdev->dev, "key_names defined, but no key_codes -> no input");
-			vfd->num_keys = 0;
-		} else {
-			u16 *cur_key = tmp_keys;
-			vfd->keys = kmalloc(vfd->num_keys * sizeof(struct vfd_key_t), GFP_KERNEL);
-			for (i = 0; i < vfd->num_keys; i++) {
-				vfd->keys[i].scancode = tmp_keys [*cur_key++];
-				vfd->keys[i].keycode = tmp_keys [*cur_key++];
-			}
+	prop = of_find_property(pdev->dev.of_node, "key_codes", NULL);
+	if (prop && prop->value && (prop->length >= (2 * sizeof (u16)))) {
+		u16 *cur_key = (u16 *)prop->value;
+		vfd->num_keys = prop->length / (2 * sizeof (u16));
+		vfd->keys = kmalloc(vfd->num_keys * sizeof(struct vfd_key_t), GFP_KERNEL);
+		for (i = 0; i < vfd->num_keys; i++) {
+			vfd->keys[i].scancode = be16_to_cpup(cur_key++);
+			vfd->keys[i].keycode = be16_to_cpup(cur_key++);
+			DBG_PRINT ("key scan %d, code %d\n",
+				vfd->keys[i].scancode, vfd->keys[i].keycode);
 		}
-
-		kfree (tmp_keys);
 	}
 
 	if (vfd->num_keys == 0)
@@ -376,8 +515,8 @@ static int __init vfd_probe(struct platform_device *pdev)
 		goto err1;
 	}
 
-	/* display "boot" at boot */
-	vfd_display_store(&pdev->dev, &dev_attr_display, "boot", 4);
+	/* display boot animation */
+	vfd->boot_anim = ARRAY_SIZE (boot_anim);
 
 	setup_timer(&vfd->timer, vfd_timer_sr, (unsigned long)vfd);
 	mod_timer(&vfd->timer, jiffies+msecs_to_jiffies(100));
@@ -386,6 +525,10 @@ static int __init vfd_probe(struct platform_device *pdev)
 	for (i = 0; i < ARRAY_SIZE (all_attrs); i++)
 		if ((ret = device_create_file(&pdev->dev, all_attrs [i])) < 0)
 			goto err2;
+
+	/* create the dot-LED objects */
+	if ((ret =  __setup_dotled (pdev, vfd)) < 0)
+		goto err2;
 
 	/* set up input device, if needed */
 	if ((ret = __setup_input (pdev, vfd)) < 0)
@@ -421,18 +564,31 @@ static int vfd_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int vfd_suspend(struct platform_device *pdev, pm_message_t state)
+static int vfd_power_common (struct platform_device *pdev, int suspend)
 {
 	struct vfd_t *vfd = platform_get_drvdata(pdev);
-	hardware_suspend (vfd, 1);
+	mutex_lock(&vfd->lock);
+	hardware_suspend(vfd, suspend);
+	mutex_unlock(&vfd->lock);
 	return 0;
+}
+
+static int vfd_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	DBG_TRACE;
+	return vfd_power_common (pdev, 1);
 }
 
 static int vfd_resume(struct platform_device *pdev)
 {
-	struct vfd_t *vfd = platform_get_drvdata(pdev);
-	hardware_suspend (vfd, 0);
-	return 0;
+	DBG_TRACE;
+	return vfd_power_common (pdev, 0);
+}
+
+static void vfd_shutdown(struct platform_device *pdev)
+{
+	DBG_TRACE;
+	vfd_power_common (pdev, 1);
 }
 
 static const struct of_device_id vfd_dt_match[]={
@@ -446,24 +602,30 @@ static struct platform_driver vfd_driver = {
 	.remove     = vfd_remove,
 	.suspend    = vfd_suspend,
 	.resume     = vfd_resume,
+	.shutdown   = vfd_shutdown,
 	.driver     = {
 		.name   = "m1-vfd.0",
 		.of_match_table = vfd_dt_match,
 	},
 };
 
-static int __init vfd_init(void)
+static int __init vfd_driver_init(void)
 {
 	return platform_driver_register(&vfd_driver);
 }
 
-static void __exit vfd_exit(void)
+static void __exit vfd_driver_exit(void)
 {
 	platform_driver_unregister(&vfd_driver);
 }
 
-module_init(vfd_init);
-module_exit(vfd_exit);
+module_exit(vfd_driver_exit);
+#ifdef CONFIG_VFD_SUPPORT_MODULE
+module_init(vfd_driver_init);
+#else
+/* If statically linked, initialize as early as possible (but after gpiolib & input) */
+subsys_initcall_sync(vfd_driver_init);
+#endif
 
 MODULE_AUTHOR("tiejun_peng");
 MODULE_DESCRIPTION("Amlogic VFD Driver");

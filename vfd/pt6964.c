@@ -62,24 +62,6 @@ static void pt6964_cmd(struct vfd_t *vfd, u8 cmd)
 	udelay(1);
 }
 
-static u8 pt6964_read(struct vfd_t *vfd)
-{
-	int i;
-	u8 d = 0;
-
-	for (i = 1; i < 0x100; i <<= 1)
-	{
-		CLK(vfd, 0);
-		ndelay(400);
-		if (DI(vfd))
-			d |= i;
-		CLK(vfd, 1);
-		ndelay(400);
-	}
-
-	return d;
-}
-
 // Clear display RAM
 static void pt6964_clear_dram(struct vfd_t *vfd)
 {
@@ -97,14 +79,24 @@ static void pt6964_clear_dram(struct vfd_t *vfd)
 	udelay(1);
 }
 
-void hardware_brightness(struct vfd_t *vfd, int bri)
-{
-	DBG_PRINT ("%d\n", bri);
+#ifndef CONFIG_VFD_NO_KEY_INPUT
 
-	if (bri == 0)
-		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(0, 0));
-	else
-		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(vfd->enabled, bri - 1));
+static u8 pt6964_read(struct vfd_t *vfd)
+{
+	int i;
+	u8 d = 0;
+
+	for (i = 1; i < 0x100; i <<= 1)
+	{
+		CLK(vfd, 0);
+		ndelay(400);
+		if (DI(vfd))
+			d |= i;
+		CLK(vfd, 1);
+		ndelay(400);
+	}
+
+	return d;
 }
 
 /*
@@ -144,9 +136,24 @@ u32 hardware_keys(struct vfd_t *vfd)
 	return keys;
 }
 
+#endif
+
+void hardware_brightness(struct vfd_t *vfd, int bri)
+{
+	DBG_PRINT ("%d\n", bri);
+
+	if (bri == 0)
+		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(0, 0));
+	else
+		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(
+			vfd->enabled && !vfd->suspended, bri - 1));
+}
+
 void hardware_suspend(struct vfd_t *vfd, int enable)
 {
 	DBG_TRACE;
+	vfd->suspended = enable;
+	hardware_brightness(vfd, vfd->brightness);
 }
 
 void hardware_display_update(struct vfd_t *vfd)

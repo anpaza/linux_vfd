@@ -27,11 +27,18 @@
 
 struct vfd_key_t {
 	/* linux key code */
-	int keycode;
+	u16 keycode;
 	/* key scan code */
-	int scancode;
-	/* key name */
-	char *name;
+	u16 scancode;
+};
+
+struct vfd_dotled_t {
+	/* LED name */
+	const char *name;
+	/* word number within display buffer */
+	u16 word;
+	/* bit number within the word */
+	u16 bit;
 };
 
 enum
@@ -54,11 +61,10 @@ struct vfd_t {
 	struct input_dev *input;
 	struct timer_list timer;
 
-#if 0
-	struct class *config_class;
-	struct device *config_dev;
-	int config_major;
-#endif
+	/* bus gpio pin descriptors */
+	struct gpio_desc *gpio_desc [GPIO_MAX];
+	/* 1 if DI/DO pin is in output mode */
+	int dido_gpio_out;
 
 	/* number of keys defined in DTS */
 	int num_keys;
@@ -97,15 +103,19 @@ struct vfd_t {
 	u8 brightness_max;
 	/* Display enabled (1) or disabled (0) */
 	u8 enabled;
+	/* Operating system suspended (1) or resumed (0) */
+	u8 suspended;
 	/* Set to 1 if any variables affecting display have changed */
 	u8 need_update;
+	/* Boot animation stage */
+	u8 boot_anim;
 	/* the state of up to 20 keys */
 	u32 keystate;
 
-	/* bus gpio pin descriptors */
-	struct gpio_desc *gpio_desc [GPIO_MAX];
-	/* 1 if DI/DO pin is in output mode */
-	int dido_gpio_out;
+	/* number of elements in the dotleds array */
+	int num_dotleds;
+	/* dot LEDs descriptions */
+	struct vfd_dotled_t *dotleds;
 };
 
 typedef int (*type_vfd_printk) (const char *fmt, ...);
