@@ -253,6 +253,7 @@ static ssize_t vfd_dotled_store(struct device *dev, struct device_attribute *att
 					vfd->raw_overlay [dotled->word] |= (1 << dotled->bit);
 				else
 					vfd->raw_overlay [dotled->word] &= ~(1 << dotled->bit);
+				vfd->need_update = 1;
 				mutex_unlock(&vfd->lock);
 				break;
 			}
