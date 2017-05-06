@@ -55,14 +55,14 @@ static const char *skip_nspaces (const char *str, int *count)
 
 //***//***//***//***//***//***// sysfs support //***//***//***//***//***//***//
 
-static ssize_t vfd_key_show(struct device *dev,
+static ssize_t key_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 	return sprintf(buf, "%u %u\n", vfd->last_scancode, vfd->last_keycode);
 }
 
-static ssize_t vfd_display_show(struct device *dev,
+static ssize_t display_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
@@ -70,7 +70,7 @@ static ssize_t vfd_display_show(struct device *dev,
 	return vfd->display_len;
 }
 
-static void _vfd_display_store(struct vfd_t *vfd, const char *buf, size_t count)
+static void _display_store(struct vfd_t *vfd, const char *buf, size_t count)
 {
 	size_t n = (count > vfd->display_len) ? vfd->display_len : count;
 
@@ -82,17 +82,17 @@ static void _vfd_display_store(struct vfd_t *vfd, const char *buf, size_t count)
 	mutex_unlock(&vfd->lock);
 }
 
-static ssize_t vfd_display_store(struct device *dev, struct device_attribute *attr,
+static ssize_t display_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 
-	_vfd_display_store (vfd, buf, count);
+	_display_store (vfd, buf, count);
 
 	return count;
 }
 
-static ssize_t vfd_overlay_show(struct device *dev,
+static ssize_t overlay_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
@@ -105,7 +105,7 @@ static ssize_t vfd_overlay_show(struct device *dev,
 	return ARRAY_SIZE (vfd->raw_overlay) * 5 - 1;
 }
 
-static ssize_t vfd_overlay_store(struct device *dev, struct device_attribute *attr,
+static ssize_t overlay_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
@@ -137,22 +137,20 @@ static ssize_t vfd_overlay_store(struct device *dev, struct device_attribute *at
 	return count;
 }
 
-static ssize_t vfd_enable_show(struct device *dev,
+static ssize_t enable_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 	return sprintf(buf, "%d\n", vfd->enabled);
 }
 
-static ssize_t vfd_enable_store(struct device *dev, struct device_attribute *attr,
+static ssize_t enable_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
-	char *endp;
 	unsigned ena;
 
-	ena = (simple_strtoul(buf, &endp, 0) != 0) ? 1 : 0;
-	if (endp == buf)
+	if (kstrtouint(buf, 0, &ena) != 0)
 		return -EINVAL;
 
 	mutex_lock(&vfd->lock);
@@ -163,24 +161,22 @@ static ssize_t vfd_enable_store(struct device *dev, struct device_attribute *att
 	return count;
 }
 
-static ssize_t vfd_brightness_show(struct device *dev,
+static ssize_t brightness_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 	return sprintf(buf, "%d\n", vfd->brightness);
 }
 
-static ssize_t vfd_brightness_store(struct device *dev, struct device_attribute *attr,
+static ssize_t brightness_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
-	char *endp;
 	unsigned bri;
 
 	buf = skip_spaces (buf);
 
-	bri = simple_strtoul(buf, &endp, 0);
-	if (endp == buf)
+	if (kstrtouint(buf, 0, &bri) != 0)
 		return -EINVAL;
 
 	if (bri > vfd->brightness_max)
@@ -193,14 +189,14 @@ static ssize_t vfd_brightness_store(struct device *dev, struct device_attribute 
 	return count;
 }
 
-static ssize_t vfd_brightness_max_show(struct device *dev,
+static ssize_t brightness_max_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 	return sprintf(buf, "%d\n", vfd->brightness_max);
 }
 
-static ssize_t vfd_dotled_show(struct device *dev,
+static ssize_t dotled_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
@@ -218,7 +214,7 @@ static ssize_t vfd_dotled_show(struct device *dev,
 	return dst - buf;
 }
 
-static ssize_t vfd_dotled_store(struct device *dev, struct device_attribute *attr,
+static ssize_t dotled_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
@@ -272,13 +268,13 @@ error:
 	return count;
 }
 
-static DEVICE_ATTR(key, S_IRUGO, vfd_key_show, NULL);
-static DEVICE_ATTR(display, S_IRUGO | S_IWUSR, vfd_display_show, vfd_display_store);
-static DEVICE_ATTR(overlay, S_IRUGO | S_IWUSR, vfd_overlay_show, vfd_overlay_store);
-static DEVICE_ATTR(enable, S_IRUGO | S_IWUSR, vfd_enable_show, vfd_enable_store);
-static DEVICE_ATTR(brightness, S_IRUGO | S_IWUSR, vfd_brightness_show, vfd_brightness_store);
-static DEVICE_ATTR(brightness_max, S_IRUGO, vfd_brightness_max_show, NULL);
-static DEVICE_ATTR(dotled, S_IRUGO | S_IWUSR, vfd_dotled_show, vfd_dotled_store);
+static DEVICE_ATTR_RO(key);
+static DEVICE_ATTR_RW(display);
+static DEVICE_ATTR_RW(overlay);
+static DEVICE_ATTR_RW(enable);
+static DEVICE_ATTR_RW(brightness);
+static DEVICE_ATTR_RO(brightness_max);
+static DEVICE_ATTR_RW(dotled);
 
 static const struct device_attribute *all_attrs [] = {
 	&dev_attr_key, &dev_attr_display, &dev_attr_overlay, &dev_attr_enable,
@@ -362,7 +358,7 @@ void vfd_timer_sr(unsigned long data)
 
 	if (unlikely (vfd->boot_anim)) {
 		vfd->boot_anim--;
-		_vfd_display_store(vfd, boot_anim [vfd->boot_anim], 4);
+		_display_store(vfd, boot_anim [vfd->boot_anim], 4);
 	}
 
 	if (unlikely (vfd->need_update)) {
