@@ -368,7 +368,7 @@ void vfd_timer_sr(unsigned long data)
 		mutex_unlock(&vfd->lock);
 	}
 
-	mod_timer(&vfd->timer, jiffies + msecs_to_jiffies(200));
+	mod_timer(&vfd->timer, jiffies + msecs_to_jiffies(100));
 }
 
 //***//***//***//***// Platform device implementation //***//***//***//***//
