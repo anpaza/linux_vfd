@@ -24,6 +24,11 @@
 #define DEFAULT_DISK_FIELD	4
 #define DEFAULT_DISK_THRESHOLD	50
 #define DEFAULT_DISK_INDICATOR	"USB"
+#define DEFAULT_DOT_ATTR	"/sys/class/switch/hdmi/state"
+#define DEFAULT_DOT_FIELD	1
+#define DEFAULT_DOT_THRESHOLD	1
+#define DEFAULT_DOT_INDICATOR	"HDMI"
+
 
 #define ARRAY_SIZE(x)		(sizeof (x) / sizeof (x [0]))
 

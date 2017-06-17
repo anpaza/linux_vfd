@@ -17,7 +17,7 @@ static struct task_t *g_tasks = NULL;
 
 extern struct task_t *task_display_new (const char *instance);
 extern struct task_t *task_clock_new (const char *instance);
-extern struct task_t *task_cmd_new (const char *instance);
+extern struct task_t *task_dot_new (const char *instance);
 extern struct task_t *task_temp_new (const char *instance);
 extern struct task_t *task_disk_new (const char *instance);
 
@@ -27,7 +27,7 @@ static struct task_module_t {
 } task_modules [] = {
 	{ "display", task_display_new },
 	{ "clock", task_clock_new },
-//	{ "cmd", task_cmd_new },
+  	{ "dot", task_dot_new },
 	{ "temp", task_temp_new },
 	{ "disk", task_disk_new },
 };
