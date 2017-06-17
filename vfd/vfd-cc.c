@@ -1,6 +1,6 @@
 /*
  * 7-segment common CATHODE display glyph support
- * Copyright (C) 2017 Andrew Zabolotny <zapparello@ya.ru>
+ * Copyright (c) 2017 Andrew Zabolotny <zapparello@ya.ru>
  *
  * The way how the display driver IC is connected to the real
  * 7-segment LED display may vary from platform to platform.

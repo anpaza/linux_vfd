@@ -3,8 +3,8 @@
  *
  * 7-segment LED display driver
  *
- * Copyright (C) 2011 tiejun_peng, Amlogic Corporation
- * Copyright (C) 2017 Andrew Zabolotny <zapparello@ya.ru>
+ * Copyright (c) 2011 tiejun_peng, Amlogic Corporation
+ * Copyright (c) 2017 Andrew Zabolotny <zapparello@ya.ru>
  *
  *
  * This program is free software; you can redistribute it and/or modify

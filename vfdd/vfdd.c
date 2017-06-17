@@ -68,16 +68,16 @@ static void signal_handler (int sig)
 	g_shutdown = 1;
 }
 
-static int load_config ()
+static int load_config (const char *config)
 {
 	int ret;
 
-	trace ("loading config file '%s'\n", g_config);
+	trace ("loading config file '%s'\n", config);
 
 	g_cfg = cfg_init ();
 
-	if ((ret = cfg_load (g_cfg, g_config)) < 0) {
-		fprintf (stderr, "failed to load config file '%s'\n", g_config);
+	if ((ret = cfg_load (g_cfg, config)) < 0) {
+		fprintf (stderr, "failed to load config file '%s'\n", config);
 		return ret;
 	}
 
@@ -174,19 +174,22 @@ int main (int argc, char *const *argv)
 				return -1;
 		}
 
-	if (optind < argc)
-		g_config = argv [optind++];
-
 	if (g_kill_daemon)
 		return kill_daemon ();
 
 	if (g_daemon)
 		daemonize ();
 
-	// load the config file
-	if ((ret = load_config ()) < 0)
+	// load the config files mentioned on command line, until one loads
+	while (optind < argc)
+		if ((ret = load_config (argv [optind++])) == 0)
+			goto configured;
+
+        // as a last resort, try to load default config
+	if ((ret = load_config (g_config)) != 0)
 		goto leave;
 
+configured:
 	if ((ret = tasks_init ()) < 0)
 		goto leave;
 

@@ -1,6 +1,6 @@
 /*
  * VFD backend for PT6964, SM1628, TM1623, FD268 LED driver chips.
- * Copyright (c) 2017 Andrey Zabolotniy <zapparello@ya.ru>
+ * Copyright (c) 2017 Andrew Zabolotny <zapparello@ya.ru>
  */
 
 #include <linux/kernel.h>
