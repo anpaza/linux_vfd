@@ -6,7 +6,6 @@
 #include <linux/kernel.h>
 #include <linux/gpio/consumer.h>
 
-#include "vfd-priv.h"
 #include "pt6964.h"
 
 static inline void CLK(struct vfd_t *vfd, int value)
@@ -73,7 +72,7 @@ static void pt6964_clear_dram(struct vfd_t *vfd)
 
 	STB(vfd, 0);
 	pt6964_send(vfd, CMD_ADDRESS_SET(0));
-	for (i = 0; i < 14; i++)
+	for (i = 0; i < RAW_DISPLAY_WORDS * 2; i++)
 		pt6964_send(vfd, 0);
 	STB(vfd, 1);
 	udelay(1);
@@ -100,18 +99,7 @@ static u8 pt6964_read(struct vfd_t *vfd)
 }
 
 /*
- * Returns key pressed bitmap in the following order:
- * bit 0  - KS1+K1
- * bit 1  - KS1+K2
- * bit 2  - KS2+K1
- * bit 3  - KS2+K2
- * bit 4  - KS3+K1
- * bit 5  - KS3+K2
- * bit 6  - KS4+K1
- * bit 7  - KS4+K2
- * ...
- * bit 18 - KS10+K1
- * bit 19 - KS10+K2
+ * Returns the whole key state bitmap in a single 32-bit word
  */
 u32 hardware_keys(struct vfd_t *vfd)
 {
@@ -124,11 +112,45 @@ u32 hardware_keys(struct vfd_t *vfd)
 	pt6964_send(vfd, CMD_DATA_SETTING (0, 1));
 	udelay (1);
 
+#if defined COMPAT_FD620
+        /*
+         * The order of keys in key state bitmap:
+         * bit 0  - SEG1/KS1
+         * bit 1  - SEG2/KS2
+         * bit 2  - SEG3/KS3
+         * bit 3  - SEG4/KS4
+         * bit 4  - SEG5/KS5
+         * bit 5  - SEG6/KS6
+         * bit 6  - SEG7/KS7
+         */
+
+	for (i = 0; i < 8; i += 2) {
+		u32 x = pt6964_read (vfd);
+		x = (x & 0x01) | ((x & 8) >> 2);
+		keys |= (x << i);
+	}
+#else
+        /*
+         * The order of keys in key state bitmap:
+         * bit 0  - KS1+K1
+         * bit 1  - KS1+K2
+         * bit 2  - KS2+K1
+         * bit 3  - KS2+K2
+         * bit 4  - KS3+K1
+         * bit 5  - KS3+K2
+         * bit 6  - KS4+K1
+         * bit 7  - KS4+K2
+         * ...
+         * bit 18 - KS10+K1
+         * bit 19 - KS10+K2
+         */
+
 	for (i = 0; i < 20; i += 4) {
 		u32 x = pt6964_read (vfd);
 		x = (x & 0x03) | ((x & 18) >> 1);
 		keys |= (x << i);
 	}
+#endif
 
 	STB (vfd, 1);
 	udelay(1);
@@ -138,30 +160,33 @@ u32 hardware_keys(struct vfd_t *vfd)
 
 #endif
 
-void hardware_brightness(struct vfd_t *vfd, int bri)
+void hardware_update_brightness(struct vfd_t *vfd)
 {
+	int bri = !vfd->enabled ? 0 :
+		vfd->suspended ? vfd->brightness_suspend :
+		vfd->brightness;
+
 	DBG_PRINT ("%d\n", bri);
 
 	if (bri == 0)
 		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(0, 0));
 	else
-		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(
-			vfd->enabled && !vfd->suspended, bri - 1));
+		pt6964_cmd(vfd, CMD_DISPLAY_CONTROL(1, bri - 1));
 }
 
 void hardware_suspend(struct vfd_t *vfd, int enable)
 {
 	DBG_TRACE;
 	vfd->suspended = enable;
-	hardware_brightness(vfd, vfd->brightness);
+	hardware_update_brightness(vfd);
 }
 
-void hardware_display_update(struct vfd_t *vfd)
+void hardware_update_display(struct vfd_t *vfd)
 {
 	unsigned i, pofs = 0x6964;
 	u16 raw [ARRAY_SIZE(vfd->raw_display)];
 
-	DBG_TRACE;
+	//DBG_TRACE;
 
 	if (vfd->display_to_raw)
 		vfd->display_to_raw (vfd, vfd->display, raw);
@@ -204,12 +229,12 @@ void hardware_display_update(struct vfd_t *vfd)
 }
 
 #if defined PLATFORM_SEGNO
-// the array that maps LCD segments a,b,c,d,...h to bit numbers
-static const u8 platform_segno [] = PLATFORM_SEGNO;
+// the array that maps LCD segments a,b,c,d,e,f,g to bit numbers
+static const u8 platform_segno [7] = PLATFORM_SEGNO;
 #elif defined PLATFORM_CELLNO
 // alternatively, for reverse-polarity displays
-static const u8 platform_cellno [] = PLATFORM_CELLNO;
-static const u8 platform_cellbit [] = PLATFORM_CELLBIT;
+static const u8 platform_cellno [7] = PLATFORM_CELLNO;
+static const u8 platform_cellbit [PLATFORM_DISPLAY_LEN] = PLATFORM_CELLBIT;
 #endif
 
 int __init hardware_init(struct vfd_t *vfd)
@@ -219,6 +244,7 @@ int __init hardware_init(struct vfd_t *vfd)
 	vfd->display_len = PLATFORM_DISPLAY_LEN;
 	vfd->brightness = 1 + PLATFORM_BRIGHTNESS;
 	vfd->brightness_max = 1 + BRIGHTNESS_MAX;
+	vfd->brightness_suspend = 0;
 	vfd->enabled = 1;
 	vfd->dido_gpio_out = 0;
 
@@ -237,7 +263,7 @@ int __init hardware_init(struct vfd_t *vfd)
 
 	pt6964_clear_dram(vfd);
 	pt6964_cmd(vfd, CMD_DISPLAY_MODE(PLATFORM_DISPLAY_MODE));
-	hardware_brightness(vfd, vfd->brightness);
+	hardware_update_brightness(vfd);
 
 	return 0;
 }

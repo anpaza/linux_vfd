@@ -24,9 +24,13 @@ What was not tested but SHOULD work:
 
 - Display controllers based on the following chips should be 100% compatible:
   PT6964, SM1628, TM1623, FD268.
+- Display controllers compatible with FD620 also seems to work.
 
 What was not tested but COULD work:
 
 - The Linux input event code has not been tested yet due to missing hardware.
   However, I believe it should work, because I have tested it by modifying
   the code so that it thinks some hardware buttons are pressed.
+
+To use this driver, copy the subdirectory vfd into AMLogic kernel tree,
+into the directory drivers/amlogic/input/.

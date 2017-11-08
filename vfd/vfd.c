@@ -44,6 +44,8 @@
 
 #include "vfd-priv.h"
 
+static void vfd_early_suspend (struct early_suspend *h);
+
 static const char *skip_nspaces (const char *str, int *count)
 {
 	while (*count && isspace (*str)) {
@@ -144,21 +146,37 @@ static ssize_t enable_show(struct device *dev,
 	return sprintf(buf, "%d\n", vfd->enabled);
 }
 
+static ssize_t _u8_store(struct vfd_t *vfd, const char *buf, size_t count, u8 *val, unsigned max)
+{
+	unsigned value;
+
+	buf = skip_spaces (buf);
+
+	if (kstrtouint(buf, 0, &value) != 0)
+		return -EINVAL;
+
+	if (value > max)
+		value = max;
+
+	mutex_lock(&vfd->lock);
+	*val = value;
+	mutex_unlock(&vfd->lock);
+
+	return count;
+}
+
 static ssize_t enable_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
-	unsigned ena;
+	ssize_t ret = _u8_store (vfd, buf, count, &vfd->enabled, 1);
+	if (ret > 0) {
+		mutex_lock(&vfd->lock);
+		hardware_update_brightness(vfd);
+		mutex_unlock(&vfd->lock);
+	}
 
-	if (kstrtouint(buf, 0, &ena) != 0)
-		return -EINVAL;
-
-	mutex_lock(&vfd->lock);
-	vfd->enabled = ena;
-	hardware_brightness(vfd, vfd->brightness);
-	mutex_unlock(&vfd->lock);
-
-	return count;
+	return ret;
 }
 
 static ssize_t brightness_show(struct device *dev,
@@ -172,21 +190,14 @@ static ssize_t brightness_store(struct device *dev, struct device_attribute *att
 	const char *buf, size_t count)
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
-	unsigned bri;
+	ssize_t ret = _u8_store (vfd, buf, count, &vfd->brightness, vfd->brightness_max);
+	if (ret > 0) {
+		mutex_lock(&vfd->lock);
+		hardware_update_brightness (vfd);
+		mutex_unlock(&vfd->lock);
+	}
 
-	buf = skip_spaces (buf);
-
-	if (kstrtouint(buf, 0, &bri) != 0)
-		return -EINVAL;
-
-	if (bri > vfd->brightness_max)
-		bri = vfd->brightness_max;
-
-	mutex_lock(&vfd->lock);
-	hardware_brightness (vfd, vfd->brightness = bri);
-	mutex_unlock(&vfd->lock);
-
-	return count;
+	return ret;
 }
 
 static ssize_t brightness_max_show(struct device *dev,
@@ -194,6 +205,20 @@ static ssize_t brightness_max_show(struct device *dev,
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 	return sprintf(buf, "%d\n", vfd->brightness_max);
+}
+
+static ssize_t brightness_suspend_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct vfd_t *vfd = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", vfd->brightness_suspend);
+}
+
+static ssize_t brightness_suspend_store(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+	struct vfd_t *vfd = dev_get_drvdata(dev);
+	return _u8_store (vfd, buf, count, &vfd->brightness_suspend, vfd->brightness_max);
 }
 
 static ssize_t dotled_show(struct device *dev,
@@ -274,11 +299,13 @@ static DEVICE_ATTR_RW(overlay);
 static DEVICE_ATTR_RW(enable);
 static DEVICE_ATTR_RW(brightness);
 static DEVICE_ATTR_RO(brightness_max);
+static DEVICE_ATTR_RW(brightness_suspend);
 static DEVICE_ATTR_RW(dotled);
 
 static const struct device_attribute *all_attrs [] = {
 	&dev_attr_key, &dev_attr_display, &dev_attr_overlay, &dev_attr_enable,
-	&dev_attr_brightness, &dev_attr_brightness_max, &dev_attr_dotled,
+	&dev_attr_brightness, &dev_attr_brightness_max, &dev_attr_brightness_suspend,
+	&dev_attr_dotled,
 };
 
 //***//***//***//***//***//***// input support //***//***//***//***//***//***//
@@ -364,7 +391,7 @@ void vfd_timer_sr(unsigned long data)
 	if (unlikely (vfd->need_update)) {
 		vfd->need_update = 0;
 		mutex_lock(&vfd->lock);
-		hardware_display_update (vfd);
+		hardware_update_display (vfd);
 		mutex_unlock(&vfd->lock);
 	}
 
@@ -531,6 +558,13 @@ static int __init vfd_probe(struct platform_device *pdev)
 	if ((ret = __setup_input (pdev, vfd)) < 0)
 		goto err2;
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	vfd->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
+	vfd->early_suspend.suspend = vfd_early_suspend;
+	vfd->early_suspend.param = pdev;
+	register_early_suspend (&vfd->early_suspend);
+#endif
+
 	return 0;
 
 err2:
@@ -549,6 +583,10 @@ static int vfd_remove(struct platform_device *pdev)
 	int i;
 	struct vfd_t *vfd = platform_get_drvdata(pdev);
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	unregister_early_suspend (&vfd->early_suspend);
+#endif
+
 	/* unregister everything */
 	for (i = ARRAY_SIZE (all_attrs) - 1; i >= 0; i--)
 		device_remove_file (&pdev->dev, all_attrs [i]);
@@ -561,12 +599,42 @@ static int vfd_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void uevent_suspend (struct platform_device *pdev, int suspend)
+{
+	char tmp [16];
+	char *env [2];
+
+	/* notify userspace of the device status,
+	 * one could display something on display when device suspends
+	 * (but don't forget to set brightness_suspend which is 0 by default)
+	 */
+	snprintf (tmp, sizeof (tmp), "SUSPEND=%d", suspend);
+	env[0] = tmp;
+	env[1] = NULL;
+	kobject_uevent_env(&pdev->dev.kobj, KOBJ_CHANGE, env);
+}
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+static void vfd_early_suspend (struct early_suspend *h)
+{
+	struct platform_device *pdev = (struct platform_device *)h->param;
+	DBG_TRACE;
+	uevent_suspend (pdev, 1);
+}
+#endif
+
 static int vfd_power_common (struct platform_device *pdev, int suspend)
 {
 	struct vfd_t *vfd = platform_get_drvdata(pdev);
+
 	mutex_lock(&vfd->lock);
 	hardware_suspend(vfd, suspend);
 	mutex_unlock(&vfd->lock);
+
+	/* we only care about resume here, suspend is handled in earlysuspend */
+	if (!suspend)
+		uevent_suspend (pdev, suspend);
+
 	return 0;
 }
 

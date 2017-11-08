@@ -56,7 +56,8 @@ void vfd_init_glyphs_cc (struct vfd_t *vfd, const u8 *segno)
 
 		src = vfd_glyphs [i].image;
 		dst = 0;
-		for (j = 0; j < 8; j++)
+		// for every segment a,b,c,d,e,f,g (7 total)...
+		for (j = 0; j < 7; j++)
 			if (src & (1 << j))
 				dst |= (1U << segno [j]);
 
