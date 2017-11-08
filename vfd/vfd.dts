@@ -62,7 +62,7 @@
                         <&gpio GPIODV_22 GPIO_ACTIVE_HIGH>,  /* CLK */
                         <&gpio GPIODV_23 GPIO_ACTIVE_HIGH>;  /* DI/DO */
                 /* dot LED names */
-                dot_names = "APPS", "SETUP", "HDMI", ":", "CARD", "CVBS", "USB";
+                dot_names = "NET", "WIFI", "PLAY", "II", ":", "CLOCK", "USB";
                 /* dot LED <16_bit_word bit_number> in raw display buffer ('overlay') */
                 dot_bits = /bits/ 8 <4 0 4 1 4 2 4 3 4 4 4 5 4 6>;
         };
