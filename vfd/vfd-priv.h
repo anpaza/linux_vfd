@@ -9,6 +9,10 @@
 #include <linux/mutex.h>
 #include <linux/delay.h>
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+
 #ifdef CONFIG_VFD_NO_DELAYS
 #undef udelay
 #undef ndelay
@@ -23,6 +27,20 @@
 #else
 #define DBG_PRINT(msg,...)
 #define DBG_TRACE
+#endif
+
+#if defined CONFIG_VFD_PT6964_T95U
+#  define COMPAT_FD620
+#else
+#  define COMPAT_PT6964
+#endif
+
+#if defined COMPAT_FD620
+// 5 16-bit words of display RAM
+#define RAW_DISPLAY_WORDS		5
+#else
+// 7 16-bit words of display RAM
+#define RAW_DISPLAY_WORDS		7
 #endif
 
 struct vfd_key_t {
@@ -77,12 +95,12 @@ struct vfd_t {
 
 	/* Number of GLYPHS on the indicator */
 	int display_len;
-	/* The displayed string (up to 7 glyphs) */
-	char display[7];
+	/* The displayed string (up to RAW_DISPLAY_WORDS glyphs) */
+	char display[RAW_DISPLAY_WORDS];
 	/* the raw overlay data for additional bits to be set (extra LEDs) */
-	u16 raw_overlay [7];
+	u16 raw_overlay [RAW_DISPLAY_WORDS];
 	/* The raw display content (device-dependent format) */
-	u16 raw_display [7];
+	u16 raw_display [RAW_DISPLAY_WORDS];
 
 	/*
 	 * Convert a string of 8-bit characters into a string of 16-bit display bitmasks
@@ -101,6 +119,8 @@ struct vfd_t {
 	u8 brightness;
 	/* Maximal brightness */
 	u8 brightness_max;
+	/* Brightness in suspend mode */
+	u8 brightness_suspend;
 	/* Display enabled (1) or disabled (0) */
 	u8 enabled;
 	/* Operating system suspended (1) or resumed (0) */
@@ -116,6 +136,11 @@ struct vfd_t {
 	int num_dotleds;
 	/* dot LEDs descriptions */
 	struct vfd_dotled_t *dotleds;
+
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	/* early suspend structure */
+	struct early_suspend early_suspend;
+#endif
 };
 
 typedef int (*type_vfd_printk) (const char *fmt, ...);
@@ -148,13 +173,11 @@ extern int hardware_init (struct vfd_t *vfd);
 extern u32 hardware_keys(struct vfd_t *vfd);
 
 /*
- * Set display brightness
+ * Update display brightness from vfd structure
  * @param vfd
- *      the platform device structure
- * @param bri
- *      the new brightness (0-max), 0 for display off.
+ *      the platform device structure, defining the brightness
  */
-extern void hardware_brightness(struct vfd_t *vfd, int bri);
+extern void hardware_update_brightness(struct vfd_t *vfd);
 
 /*
  * Suspend (enable=1) or resume (enable=0) the LCD.
@@ -166,7 +189,7 @@ extern void hardware_suspend(struct vfd_t *vfd, int enable);
  * @param vfd
  *      the platform device structure
  */
-extern void hardware_display_update(struct vfd_t *vfd);
+extern void hardware_update_display(struct vfd_t *vfd);
 
 
 struct vfd_glyph_t {
