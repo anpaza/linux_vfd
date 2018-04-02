@@ -390,9 +390,7 @@ void vfd_timer_sr(unsigned long data)
 
 	if (unlikely (vfd->need_update)) {
 		vfd->need_update = 0;
-		mutex_lock(&vfd->lock);
 		hardware_update_display (vfd);
-		mutex_unlock(&vfd->lock);
 	}
 
 	mod_timer(&vfd->timer, jiffies + msecs_to_jiffies(100));
