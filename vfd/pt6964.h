@@ -41,7 +41,7 @@
 // 8 brighness levels 0..7 (0 is lowest brightness, not off)
 #define BRIGHTNESS_MAX			7
 
-#if defined CONFIG_VFD_PT6964_X92
+#if defined CONFIG_VFD_PT6964_X92 || defined CONFIG_VFD_PT6964_X96MAX
 
 // LED display brightness at startup
 #define PLATFORM_BRIGHTNESS		3

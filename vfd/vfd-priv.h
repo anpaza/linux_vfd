@@ -61,14 +61,14 @@ struct vfd_dotled_t {
 
 enum
 {
-	// STB signal index in gpio_xxx[] arrays
+	// STB signal index in gpio[]
 	GPIO_STB,
 	// CLK signal index
 	GPIO_CLK,
 	// DI/DO signal index
 	GPIO_DIDO,
 
-	// number of GPIO entries in gpio_xxx[] arrays
+	// number of GPIO entries in gpio[]
 	GPIO_MAX
 };
 
@@ -79,8 +79,8 @@ struct vfd_t {
 	struct input_dev *input;
 	struct timer_list timer;
 
-	/* bus gpio pin descriptors */
-	struct gpio_desc *gpio_desc [GPIO_MAX];
+	/* bus gpio numbers */
+	int gpio [GPIO_MAX];
 	/* 1 if DI/DO pin is in output mode */
 	int dido_gpio_out;
 

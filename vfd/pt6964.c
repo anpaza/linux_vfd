@@ -4,28 +4,28 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/gpio/consumer.h>
+#include <linux/gpio.h>
 
 #include "pt6964.h"
 
 static inline void CLK(struct vfd_t *vfd, int value)
 {
-	gpiod_set_value(vfd->gpio_desc[GPIO_CLK], value);
+	gpio_set_value(vfd->gpio[GPIO_CLK], value);
 }
 
 static inline void STB(struct vfd_t *vfd, int value)
 {
-	gpiod_set_value(vfd->gpio_desc[GPIO_STB], value);
+	gpio_set_value(vfd->gpio[GPIO_STB], value);
 }
 
 static inline void DO(struct vfd_t *vfd, int value)
 {
 	if (vfd->dido_gpio_out)
-		gpiod_set_value(vfd->gpio_desc[GPIO_DIDO], value);
+		gpio_set_value(vfd->gpio[GPIO_DIDO], value);
 	else
 	{
 		vfd->dido_gpio_out = 1;
-		gpiod_direction_output(vfd->gpio_desc[GPIO_DIDO], value);
+		gpio_direction_output(vfd->gpio[GPIO_DIDO], value);
 	}
 }
 
@@ -34,10 +34,10 @@ static inline int DI(struct vfd_t *vfd)
 	if (vfd->dido_gpio_out) {
 		/* switch to input mode */
 		vfd->dido_gpio_out = 0;
-		gpiod_direction_input(vfd->gpio_desc[GPIO_DIDO]);
+		gpio_direction_input(vfd->gpio[GPIO_DIDO]);
 	}
 
-	return gpiod_get_value(vfd->gpio_desc[GPIO_DIDO]);
+	return gpio_get_value(vfd->gpio[GPIO_DIDO]);
 }
 
 // Send a byte to chip; assumes STB & CLK high
@@ -255,9 +255,9 @@ int __init hardware_init(struct vfd_t *vfd)
 #endif
 
 	// set up GPIO modes
-	gpiod_direction_output(vfd->gpio_desc [GPIO_STB], 1);
-	gpiod_direction_output(vfd->gpio_desc [GPIO_CLK], 1);
-	gpiod_direction_input(vfd->gpio_desc [GPIO_DIDO]);
+	gpio_direction_output(vfd->gpio [GPIO_STB], 1);
+	gpio_direction_output(vfd->gpio [GPIO_CLK], 1);
+	gpio_direction_input(vfd->gpio [GPIO_DIDO]);
 
 	udelay(10);
 

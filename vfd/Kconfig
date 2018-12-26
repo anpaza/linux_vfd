@@ -65,4 +65,9 @@ config VFD_PT6964_T95U
 	help
 	  Connection scheme used on T95U AMlogic S912-based TV boxes
 
+config VFD_PT6964_X96MAX
+	bool "X96 Max LED display (FD628)"
+	help
+	  Connection scheme used on X96 Max AMlogic S905X2-based TV boxes
+
 endchoice

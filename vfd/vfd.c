@@ -44,7 +44,9 @@
 
 #include "vfd-priv.h"
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
 static void vfd_early_suspend (struct early_suspend *h);
+#endif
 
 static const char *skip_nspaces (const char *str, int *count)
 {
@@ -390,9 +392,7 @@ void vfd_timer_sr(unsigned long data)
 
 	if (unlikely (vfd->need_update)) {
 		vfd->need_update = 0;
-		mutex_lock(&vfd->lock);
 		hardware_update_display (vfd);
-		mutex_unlock(&vfd->lock);
 	}
 
 	mod_timer(&vfd->timer, jiffies + msecs_to_jiffies(100));
@@ -404,29 +404,26 @@ void vfd_timer_sr(unsigned long data)
 static __init int __setup_gpios (struct platform_device *pdev, struct vfd_t *vfd)
 {
 	int i, n, ret;
-	struct gpio_desc *desc;
 
 	for (i = 0; i < GPIO_MAX; i++) {
-		desc = of_get_named_gpiod_flags(pdev->dev.of_node, "gpios", i, NULL);
-		if (IS_ERR(desc)) {
+		n = of_get_named_gpio_flags(pdev->dev.of_node, "gpios", i, NULL);
+		if (n < 0) {
 			dev_err(&pdev->dev, "%d bus signal GPIOs must be defined", GPIO_MAX);
-			return PTR_ERR (desc);
+			return n;
 		}
-
-		n = desc_to_gpio(desc);
 
 		if ((ret = gpio_request(n, "vfd")) < 0) {
 			dev_info(&pdev->dev, "failed to request gpio %d\n", n);
 			return ret;
 		}
 
-		vfd->gpio_desc [i] = desc;
+		vfd->gpio [i] = n;
 	}
 
 	dev_info(&pdev->dev, "bus signals STB,CLK,DI/DO mapped to GPIOs %d,%d,%d\n",
-		desc_to_gpio(vfd->gpio_desc[GPIO_STB]),
-		desc_to_gpio(vfd->gpio_desc[GPIO_CLK]),
-		desc_to_gpio(vfd->gpio_desc[GPIO_DIDO]));
+		vfd->gpio[GPIO_STB],
+		vfd->gpio[GPIO_CLK],
+		vfd->gpio[GPIO_DIDO]);
 
 	return 0;
 }

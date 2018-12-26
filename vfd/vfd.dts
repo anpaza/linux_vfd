@@ -54,7 +54,7 @@
 
 // AMLogic S912-based T95U Android TV box, FD620 chip
 
-	meson-on-vfd {
+	meson-vfd {
                 compatible = "amlogic,aml_vfd";
                 dev_name = "meson-vfd";
                 status = "okay";
