@@ -78,12 +78,10 @@ static void _display_store(struct vfd_t *vfd, const char *buf, size_t count)
 {
 	size_t n = (count > vfd->display_len) ? vfd->display_len : count;
 
-	mutex_lock(&vfd->lock);
 	/* pad with spaces */
 	memset(vfd->display + n, 0, vfd->display_len - n);
 	memcpy(vfd->display, buf, n);
 	vfd->need_update = 1;
-	mutex_unlock(&vfd->lock);
 }
 
 static ssize_t display_store(struct device *dev, struct device_attribute *attr,
@@ -91,7 +89,9 @@ static ssize_t display_store(struct device *dev, struct device_attribute *attr,
 {
 	struct vfd_t *vfd = dev_get_drvdata(dev);
 
+	mutex_lock(&vfd->lock);
 	_display_store (vfd, buf, count);
+	mutex_unlock(&vfd->lock);
 
 	return count;
 }
