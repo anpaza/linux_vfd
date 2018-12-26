@@ -36,7 +36,7 @@ static void task_dot_fini (struct task_t *self)
 	free (self_dot);
 }
 
-static unsigned task_dot_run (struct task_t *self, struct timeval *tv)
+static unsigned task_dot_run (struct task_t *self)
 {
 	struct task_dot_t *self_dot = (struct task_dot_t *)self;
 	char *tmp, *cur;
@@ -63,7 +63,7 @@ static unsigned task_dot_run (struct task_t *self, struct timeval *tv)
         val = (val >= self_dot->threshold) ? 1 : 0;
 	if (self_dot->display && (val != self_dot->indicator_enabled)) {
 		self_dot->indicator_enabled = val;
-		self_dot->display->set_indicator (self_dot->display,
+		self_dot->display->set_indicator (self_dot->display, self,
 			self_dot->indicator, val);
 	}
 

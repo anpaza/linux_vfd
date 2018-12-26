@@ -6,123 +6,236 @@
 #include "vfdd.h"
 #include "task-display.h"
 
-static unsigned task_display_run (struct task_t *self, struct timeval *tv)
+static void task_display_update (struct task_display_t *self);
+
+static int task_display_qualify (struct display_user_t *user)
+{
+	return (user != NULL) && (user->display != NULL);
+}
+
+static void task_display_set_active (struct task_display_t *self, struct display_user_t *user)
+{
+	if (self->active_user == user)
+		return;
+
+	trace ("%s: --------- set active display task [%s]\n",
+		self->task.instance, user ? user->task->instance : "NONE");
+
+	struct display_user_t *cur = self->active_user;
+	if (cur && cur->task->display_notify)
+		cur->task->display_notify (cur->task, 0);
+
+	self->active_user = user;
+	self->task.attention = 1;
+
+	if (user && user->task->display_notify)
+		user->task->display_notify (user->task, 1);
+}
+
+static void task_display_next (struct task_display_t *self)
+{
+	struct display_user_t *user, *next;
+	int find_next = 1;
+	int pass;
+
+	/* if active task has max priority, don't switch away */
+	if (self->active_user && self->active_user->priority == PRIORITY_MAX)
+		return;
+
+	next = self->active_user;
+
+	/* switch display to next task with a non-NULL display string */
+	for (pass = 0; find_next && (pass < 2); pass++) {
+		/* if there's no active display user, just start from beginning */
+		if (!next)
+			if (task_display_qualify (next = self->users))
+				find_next = 0;
+
+		for (user = self->users; find_next && user; user = user->next) {
+			if (next == user) {
+				if (user->next)
+					next = user->next;
+				else
+					next = self->users;
+
+				if (task_display_qualify (next))
+					find_next = 0;
+			}
+		}
+	}
+
+	if (find_next)
+		next = NULL;
+
+	task_display_set_active (self, next);
+}
+
+static unsigned task_display_run (struct task_t *self)
 {
 	struct task_display_t *self_display = (struct task_display_t *)self;
 	struct display_user_t *user;
-	struct task_t *old_display_task = self_display->display_task;
-	int min_prio = 1000000;
-	int find_next = 1;
+	unsigned adj, sleep_time;
 
-	trace ("%s: run\n", self->instance);
+	trace ("%s: run (%u) due to %s\n", self->instance, self->sleep_ms,
+		(self->sleep_ms == 0) ? "timeout" : "attention request");
 
-	/* if there are no display users, just sleeeeeeep */
-	if (!self_display->users->task)
+	/* if time slot ended, switch to next display user */
+	if (self->sleep_ms == 0)
+		task_display_next (self_display);
+
+	if (!(user = self_display->active_user))
 		return 1000000;
 
-	/* switch display to next task */
-	for (user = self_display->users; user; user = user->next) {
-		if (min_prio > user->priority)
-			min_prio = user->priority;
+	task_display_update (self_display);
 
-		if (find_next && (self_display->display_task == user->task)) {
-			find_next = 0;
-			if (user->next)
-				self_display->display_task = user->next->task;
-			else
-				self_display->display_task = self_display->users->task;
+	sleep_time = (self_display->quantum * user->priority) / self_display->min_priority;
+	// adjust sleep_time to nearest time quantum boundary
+	adj = (g_time.tv_usec / 1000) % self_display->quantum;
+	return sleep_time > adj ? sleep_time - adj : self_display->quantum - adj;
+}
+
+static struct display_user_t *task_display_get_user (struct task_display_t *self, struct task_t *source)
+{
+	struct display_user_t *user;
+
+	for (user = self->users; user; user = user->next) {
+		if (user->task == source)
+			return user;
+	}
+
+	/* no display user structure, allocate a new one */
+	user = calloc (1, sizeof (struct display_user_t));
+	user->task = source;
+	user->next = self->users;
+	self->users = user;
+
+	return user;
+}
+
+static void task_display_remove_user (struct task_display_t *self, struct task_t *source)
+{
+	struct display_user_t *next;
+	struct display_user_t **cur;
+
+	for (cur = &self->users; *cur; cur = &(*cur)->next) {
+		if ((*cur)->task == source) {
+			struct display_user_t *user = *cur;
+			if (user->display)
+				free (user->display);
+			/* remove cur from list */
+			next = user->next;
+			free (user);
+			*cur = next;
+
+			/* if we're removing the active display user, switch to next */
+			if (self->active_user == user) {
+				self->active_user = next;
+				self->task.attention = 1;
+			}
+
+			return;
 		}
 	}
-	/* if we did not found the current display user, just start from beginning */
-	if (!self_display->display_task)
-		self_display->display_task = self_display->users->task;
+}
 
-	if (old_display_task && (old_display_task != self_display->display_task))
-		if (old_display_task->display_notify)
-			old_display_task->display_notify (old_display_task, tv, 0);
+static void task_display_update (struct task_display_t *self)
+{
+	struct display_user_t *user;
+	const char *text = NULL;
+	unsigned dotled = 0;
+	unsigned i;
 
-	for (user = self_display->users; user; user = user->next)
-		if (self_display->display_task == user->task) {
-			unsigned adj, sleep_time;
+	if ((user = self->active_user) != NULL)
+		text = user->display;
 
-			trace ("%s: show [%s]\n", self_display->task.instance, user->display);
+	if (!text)
+		text = "";
 
-			sysfs_set_str (self_display->device, "display", user->display);
+	trace ("%s: show [%s]\n", self->task.instance, text);
+	sysfs_set_str (self->device, "display", text);
 
-			if (self_display->display_task->display_notify)
-				self_display->display_task->display_notify (self_display->display_task, tv, 1);
+	/* dotled is a logical OR of all display tasks */
+	for (user = self->users; user; user = user->next)
+		dotled |= user->dotled;
 
-			sleep_time = (self_display->quantum * user->priority) / min_prio;
-			// adjust sleep_time to nearest time quantum boundary
-			adj = (tv->tv_usec / 1000) % self_display->quantum;
-			return sleep_time > adj ? sleep_time - adj : self_display->quantum - adj;
+	int dotled_changed = 0;
+	for (i = 0; i < self->indicator_count; i++) {
+		struct indicator_t *ind = &self->indicators [i];
+		unsigned mask = 1 << i;
+		unsigned need_mask = ind->mask;
+
+		if ((dotled & mask) == 0)
+			need_mask = 0;
+		if ((self->overlay [ind->word] & ind->mask) != need_mask) {
+			self->overlay [ind->word] = (self->overlay [ind->word] & ~ind->mask) | need_mask;
+			dotled_changed = 1;
+		}
+	}
+
+	if (dotled_changed) {
+		for (i = 0; i < self->overlay_len; i++) {
+			snprintf (self->overlay_buff + i * 5, 5, "%04X", self->overlay [i]);
+			if (i < self->overlay_len - 1)
+				self->overlay_buff [i * 5 + 4] = ' ';
 		}
 
-	trace ("%s: should never get here\n", self_display->task.instance);
-	return 1000000;
+		trace ("%s: overlay [%s]\n", self->task.instance, self->overlay_buff);
+		sysfs_set_str (self->device, "overlay", self->overlay_buff);
+	}
 }
 
 static void task_display_set_display (struct task_display_t *self, struct task_t *source, int priority,
 	const char *string)
 {
-	struct display_user_t *next;
-	struct display_user_t **user;
-	struct task_display_t *self_display = (struct task_display_t *)self;
+	struct display_user_t *user;
 
 	trace ("%s: set_display '%s' prio %d\n", self->task.instance, string, priority);
 
-	for (user = &self_display->users; *user; user = &(*user)->next) {
-		if ((*user)->task == source) {
-			free ((*user)->display);
-			if (string == NULL || (priority < 1)) {
-				/* remove user from list */
-				next = (*user)->next;
-				free (*user);
-				*user = next;
-				return;
-			}
-			next = *user;
-			goto update_display;
-		}
-	}
-
-	if (string == NULL || (priority < 1))
+	if ((priority < 1) || !string) {
+		task_display_remove_user (self, source);
 		return;
-
-	/* if there were no display users, schedule for running ASAP */
-	if (self_display->users == NULL)
-		self_display->task.sleep_ms = 0;
-
-	/* create display user */
-	next = calloc (1, sizeof (struct display_user_t));
-	next->next = self_display->users;
-	self_display->users = next;
-	next->task = source;
-
-update_display:
-	next->display = strdup (string);
-	next->priority = priority;
-
-	if (self_display->display_task == source) {
-		trace ("%s: show [%s]\n", self_display->task.instance, next->display);
-		sysfs_set_str (self_display->device, "display", next->display);
 	}
+
+	user = task_display_get_user (self, source);
+	if (user->display) {
+		free (user->display);
+		user->display = NULL;
+	}
+
+	user->display = strdup (string);
+	user->priority = priority;
+	if (self->min_priority > priority)
+		self->min_priority = priority;
+
+	if (priority == PRIORITY_MAX)
+		task_display_set_active (self, user);
+
+	if (self->active_user == user)
+		self->task.attention = 1;
 }
 
-static void task_display_set_indicator (struct task_display_t *self, const char *indicator, int enable)
+static void task_display_set_indicator (struct task_display_t *self, struct task_t *source,
+	const char *indicator, int enable)
 {
 	int i;
-	enable = (enable != 0);
+	struct display_user_t *user;
 
-	trace ("%s: set_indicator '%s' %s\n", self->task.instance, indicator,
-		enable ? "on" : "off");
+	trace ("%s: %s set_indicator '%s' %s\n", self->task.instance, source->instance,
+		indicator, enable ? "on" : "off");
+
+	user = task_display_get_user (self, source);
 
 	for (i = 0; i < self->indicator_count; i++) {
 		struct indicator_t *ind = &self->indicators [i];
 		if (strcmp (indicator, ind->name) == 0) {
-			char tmp [32];
-			snprintf (tmp, sizeof (tmp), "%s %d", indicator, enable);
-			sysfs_set_str (self->device, "dotled", tmp);
+			if (enable != 0)
+				user->dotled |= (1 << i);
+			else
+				user->dotled &= ~(1 << i);
+
+			if (self->active_user == user)
+				self->task.attention = 1;
+
 			return;
 		}
 	}
@@ -142,8 +255,16 @@ static void task_display_set_brightness (struct task_display_t *self, int value)
 	trace ("%s: set_brightness %d\n", self->task.instance, value);
 
 	self->brightness = value;
-	raw_value = (value * self->brightness_max) / 100;
+	raw_value = (value * self->brightness_max + 50) / 100;
 	sysfs_set_int (self->device, "brightness", raw_value);
+}
+
+static int task_display_is_active (struct task_display_t *self, struct task_t *source)
+{
+	if (!self->active_user)
+		return 0;
+
+	return (self->active_user->task == source);
 }
 
 static void task_display_fini (struct task_t *self)
@@ -152,25 +273,24 @@ static void task_display_fini (struct task_t *self)
 	struct display_user_t **user;
 	int i;
 
-	/* clear display */
-	sysfs_set_str (self_display->device, "display", "");
+	/* unlock display */
+	self_display->active_user = 0;
 
-	/* clear all indicators */
-	for (i = 0; i < self_display->indicator_count; i++)
-		task_display_set_indicator (self_display,
-			self_display->indicators [i].name, 0);
-
-	if (self_display->indicators) {
-		for (i = 0; i < self_display->indicator_count; i++)
-			free (self_display->indicators [i].name);
-		free (self_display->indicators);
-	}
-
+	/* free display users */
 	for (user = &self_display->users; *user; ) {
 		struct display_user_t *next = (*user)->next;
 		free ((*user)->display);
 		free (*user);
 		*user = next;
+	}
+
+	/* update display (effectively clear) */
+	task_display_update (self_display);
+
+	if (self_display->indicators) {
+		for (i = 0; i < self_display->indicator_count; i++)
+			free (self_display->indicators [i].name);
+		free (self_display->indicators);
 	}
 
 	if (self_display->overlay)
@@ -183,16 +303,19 @@ static void task_display_fini (struct task_t *self)
 
 struct task_t *task_display_new (const char *instance)
 {
-	char *cur, *tmp;
+	char *tmp;
 	struct task_display_t *self = calloc (1, sizeof (struct task_display_t));
 
 	task_init (&self->task, instance);
+
+	self->min_priority = 1000000;
 
 	self->task.run = task_display_run;
 	self->task.fini = task_display_fini;
 	self->set_display = task_display_set_display;
 	self->set_indicator = task_display_set_indicator;
 	self->set_brightness = task_display_set_brightness;
+	self->is_active = task_display_is_active;
 
 	self->device = cfg_get_str (instance, "device", DEFAULT_DEVICE);
 	if (sysfs_exists (self->device) != 0) {
@@ -224,10 +347,14 @@ struct task_t *task_display_new (const char *instance)
 				(n + 1) * sizeof (struct indicator_t));
 
 			self->indicators [n].name = strdup (name);
-			self->indicators [n].on = ena;
+			self->indicators [n].word = word;
+			self->indicators [n].mask = 1 << bit;
 			self->indicator_count++;
 			trace ("	indicator [%s] enabled %d, word %d, bit %d\n",
-				self->indicators [n].name, self->indicators [n].on, word, bit);
+				self->indicators [n].name, ena, word, bit);
+
+			if (word + 1 > self->overlay_len)
+				self->overlay_len = word + 1;
 
 			cur = strchr (cur, '\n');
 			if (!cur)
@@ -237,33 +364,8 @@ struct task_t *task_display_new (const char *instance)
 	}
 
 	/* initialize overlay */
-	tmp = sysfs_get_str (self->device, "overlay");
-	if (!tmp) {
-		fprintf (stderr, "device '%s' is incompatible, aborting task '%s'\n",
-			self->device, self->task.instance);
-		task_display_fini (&self->task);
-		return NULL;
-	}
-	cur = tmp;
-
-	for (self->overlay_len = 0; ; ) {
-		char *endp;
-
-		while (isspace (*cur))
-			cur++;
-
-		uint16_t n = strtoul (cur, &endp, 16);
-		if (endp == cur)
-			break;
-
-		self->overlay_len++;
-		self->overlay = realloc (self->overlay, self->overlay_len * sizeof (uint16_t));
-		self->overlay [self->overlay_len - 1] = n;
-
-		cur = endp;
-	}
-
-	free (tmp);
+	self->overlay = calloc (self->overlay_len, sizeof (uint16_t));
+	self->overlay_buff = malloc (self->overlay_len * 5);
 
 	/* get max brightness */
 	self->brightness_max = sysfs_get_int (self->device, "brightness_max");

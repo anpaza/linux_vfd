@@ -33,6 +33,11 @@ SETUP CARD  | | | | . | | | |  CVBS
 11 - SEG5/KS5
 12 - SEG4/KS4
 
+D-0 - digit 0
+D-1 - digit 1
+D-2 - digit 2
+D-3 - digit 3
+
 The display is reverse polarity, that is, common ANODE.
 Because of this, LED display GRIDs are connected to IC SEG's, and
 display SEGs are connected to IC GRID. As a result, one byte of

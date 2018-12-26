@@ -7,18 +7,20 @@
 
 #include "task.h"
 
+#define PRIORITY_MAX		1000000
+
 struct display_user_t {
 	struct display_user_t *next;
 	struct task_t *task;
 	int priority;
 	char *display;
+	uint16_t dotled;
 };
 
 struct indicator_t {
-	/* indicator name */
 	char *name;
-	/* current state */
-	int on;
+	int word;
+	unsigned mask;
 };
 
 struct task_display_t {
@@ -30,13 +32,15 @@ struct task_display_t {
 	int brightness;
 	int brightness_max;
 	int quantum;
+	int min_priority;
 
 	uint16_t *overlay;
 	int overlay_len;
+	char *overlay_buff;
 
 	struct display_user_t *users;
-	/* the task currently owning the display */
-	struct task_t *display_task;
+	/* the display user currently owning the display */
+	struct display_user_t *active_user;
 
 	/**
 	 * Display a string on behalf of given task.
@@ -64,12 +68,16 @@ struct task_display_t {
 	 * Enable or disable a single icon on the display
 	 * @arg self
 	 *	the display task
+	 * @arg source
+	 *      the task owning the icon. The icon is turned off if the task passes away,
+	 *      and all active icons from all tasks are lighted up at the same time.
 	 * @arg indicator
 	 *	the name of the indicator
 	 * @arg enable
 	 *	0 to disable the indicator, 1 to enable
 	 */
-	void (*set_indicator) (struct task_display_t *self, const char *indicator, int enable);
+	void (*set_indicator) (struct task_display_t *self, struct task_t *source,
+		const char *indicator, int enable);
 
 	/**
 	 * Change display brightness
@@ -79,6 +87,15 @@ struct task_display_t {
 	 *	new brightness (0-100%)
 	 */
 	void (*set_brightness) (struct task_display_t *self, int value);
+
+	/**
+	 * Check if given task is currently active.
+	 * @arg source
+	 *      the task to check.
+	 * @return
+	 *      0 if the task is not active, non-zero if it is currently owning the display.
+	 */
+	int (*is_active) (struct task_display_t *self, struct task_t *source);
 };
 
 #endif /* __TASK_DISPLAY_H__ */

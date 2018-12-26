@@ -12,10 +12,12 @@
 #include "task.h"
 
 static struct task_t *g_tasks = NULL;
+struct timeval g_time;
 
 /* declare task constructors below */
 
 extern struct task_t *task_display_new (const char *instance);
+extern struct task_t *task_suspend_new (const char *instance);
 extern struct task_t *task_clock_new (const char *instance);
 extern struct task_t *task_dot_new (const char *instance);
 extern struct task_t *task_temp_new (const char *instance);
@@ -26,6 +28,7 @@ static struct task_module_t {
 	struct task_t *(*new) (const char *instance);
 } task_modules [] = {
 	{ "display", task_display_new },
+	{ "suspend", task_suspend_new },
 	{ "clock", task_clock_new },
   	{ "dot", task_dot_new },
 	{ "temp", task_temp_new },
@@ -117,31 +120,50 @@ int tasks_init ()
 void tasks_run ()
 {
 	struct task_t *cur;
-	struct timeval tv, tv2;
+	struct timeval tv;
 
-	gettimeofday (&tv, NULL);
+	gettimeofday (&g_time, NULL);
 
 	while (!g_shutdown) {
 		/* sleep no more than 10 seconds */
 		unsigned sleep_time = 10000;
 
-		/* run all tasks which are ready to run */
-		for (cur = g_tasks; cur; cur = cur->next)
-			if (cur->sleep_ms == 0) {
-				cur->sleep_ms = cur->run (cur, &tv);
+		/* run all tasks which are ready to run
+		 * until we're left with no ready tasks
+		 */
+		int ready = 1;
+		while (ready) {
+			ready = 0;
+
+
+			/* run all ready-to-run tasks */
+			for (cur = g_tasks; cur; cur = cur->next) {
+				if (cur->sleep_ms == 0) {
+					cur->sleep_ms = cur->run (cur);
+				} else if (cur->attention) {
+					cur->attention = 0;
+					cur->run (cur);
+				}
 				if (sleep_time > cur->sleep_ms)
 					sleep_time = cur->sleep_ms;
-			} else if (sleep_time > cur->sleep_ms)
-				sleep_time = cur->sleep_ms;
+			}
+
+			/* check if there are more ready-to-run tasks */
+			for (cur = g_tasks; cur; cur = cur->next)
+				if (cur->attention || (cur->sleep_ms == 0)) {
+					ready = 1;
+					break;
+				}
+		}
 
 		usleep (sleep_time * 1000);
 
 		/* find out how much we actually slept */
-		tv2 = tv;
-		gettimeofday (&tv, NULL);
+		tv = g_time;
+		gettimeofday (&g_time, NULL);
 
-		sleep_time = ((tv.tv_sec & 255) * 1000 + tv.tv_usec / 1000) - 
-			((tv2.tv_sec & 255) * 1000 + tv2.tv_usec / 1000);
+		sleep_time = ((g_time.tv_sec & 255) * 1000 + g_time.tv_usec / 1000) - 
+			((tv.tv_sec & 255) * 1000 + tv.tv_usec / 1000);
 
 		for (cur = g_tasks; cur; cur = cur->next)
 			if (cur->sleep_ms > sleep_time)

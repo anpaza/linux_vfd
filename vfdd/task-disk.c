@@ -34,7 +34,7 @@ static void task_disk_fini (struct task_t *self)
 	free (self_disk);
 }
 
-static unsigned task_disk_run (struct task_t *self, struct timeval *tv)
+static unsigned task_disk_run (struct task_t *self)
 {
 	struct task_disk_t *self_disk = (struct task_disk_t *)self;
 	char buff [50];
@@ -72,7 +72,7 @@ static unsigned task_disk_run (struct task_t *self, struct timeval *tv)
 setind:
 	if (self_disk->indicator_enabled != enable) {
 		self_disk->indicator_enabled = enable;
-		self_disk->display->set_indicator (self_disk->display,
+		self_disk->display->set_indicator (self_disk->display, self,
 			self_disk->indicator, enable);
 	}
 

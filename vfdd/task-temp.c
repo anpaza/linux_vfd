@@ -32,7 +32,7 @@ static void task_temp_fini (struct task_t *self)
 	free (self_temp);
 }
 
-static unsigned task_temp_run (struct task_t *self, struct timeval *tv)
+static unsigned task_temp_run (struct task_t *self)
 {
 	struct task_temp_t *self_temp = (struct task_temp_t *)self;
 	char *tmp;

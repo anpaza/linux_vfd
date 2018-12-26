@@ -33,7 +33,7 @@ static void task_clock_fini (struct task_t *self)
 	free (self_clock);
 }
 
-static unsigned task_clock_run (struct task_t *self, struct timeval *tv)
+static unsigned task_clock_run (struct task_t *self)
 {
 	struct task_clock_t *self_clock = (struct task_clock_t *)self;
 	char buff [32];
@@ -42,23 +42,23 @@ static unsigned task_clock_run (struct task_t *self, struct timeval *tv)
 
 	trace ("%s: run\n", self->instance);
 
-	if (self_clock->last_time != tv->tv_sec) {
-		self_clock->last_time = tv->tv_sec;
+	if (self_clock->last_time != g_time.tv_sec) {
+		self_clock->last_time = g_time.tv_sec;
 
-		localtime_r (&tv->tv_sec, &tm);
+		localtime_r (&g_time.tv_sec, &tm);
 		strftime (buff, sizeof (buff), self_clock->format, &tm);
 		if (self_clock->display)
 			self_clock->display->set_display (self_clock->display,
 				self, self_clock->priority, buff);
 	}
 
-	ms = (tv->tv_usec / 1000) % 1000;
+	ms = (g_time.tv_usec / 1000) % 1000;
 
 	/* display flashing H:S separator every 0.5 sec */
 	if (self_clock->separator && self_clock->display) {
 		int ena = self_clock->separator_always ? 1 :
-			(self_clock->display->display_task == self);
-		self_clock->display->set_indicator (self_clock->display,
+			self_clock->display->is_active (self_clock->display, self);
+		self_clock->display->set_indicator (self_clock->display, self,
 			self_clock->separator, ena && (ms < 500));
 	}
 
@@ -66,7 +66,7 @@ static unsigned task_clock_run (struct task_t *self, struct timeval *tv)
 	return ((1 + (ms / 500)) * 500) - ms;
 }
 
-static void task_clock_display_notify (struct task_t *self, struct timeval *tv, int active)
+static void task_clock_display_notify (struct task_t *self, int active)
 {
 	struct task_clock_t *self_clock = (struct task_clock_t *)self;
 	unsigned ms;
@@ -74,12 +74,12 @@ static void task_clock_display_notify (struct task_t *self, struct timeval *tv, 
 	trace ("%s: display_notify %d\n", self->instance, active);
 
 	/* refresh the double colon indicator */
-	ms = (tv->tv_usec / 1000) % 1000;
+	ms = (g_time.tv_usec / 1000) % 1000;
 
 	/* display flashing H:S separator every 0.5 sec */
 	if (self_clock->separator && self_clock->display) {
 		int ena = self_clock->separator_always ? 1 : active;
-		self_clock->display->set_indicator (self_clock->display,
+		self_clock->display->set_indicator (self_clock->display, self,
 			self_clock->separator, ena && (ms < 500));
 	}
 }

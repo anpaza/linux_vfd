@@ -28,6 +28,9 @@
 #define DEFAULT_DOT_FIELD	1
 #define DEFAULT_DOT_THRESHOLD	1
 #define DEFAULT_DOT_INDICATOR	"HDMI"
+#define DEFAULT_SUSPEND_TEXT	"*  *"
+#define DEFAULT_SUSPEND_INDICATORS ""
+#define DEFAULT_SUSPEND_BRIGHTNESS 10
 
 
 #define ARRAY_SIZE(x)		(sizeof (x) / sizeof (x [0]))
